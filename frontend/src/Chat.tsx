@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { streamChat } from './api'
+import { Markdown } from './Markdown'
 
 type Msg = { role: 'user' | 'assistant'; content: string }
 
@@ -41,8 +42,12 @@ export function Chat() {
     <aside className="chat" aria-label="Chat with Chipi">
       <div className="chat-log">
         {messages.map((m, i) => (
-          <div key={i} className={m.role === 'user' ? 'msg msg-user' : 'msg'}>
-            {m.content || (busy && i === messages.length - 1 ? '…' : '')}
+          <div key={i} className={m.role === 'user' ? 'msg msg-user' : 'msg msg-md'}>
+            {m.role === 'user'
+              ? m.content
+              : m.content
+                ? <Markdown text={m.content} />
+                : busy && i === messages.length - 1 ? '…' : ''}
           </div>
         ))}
         {tool && <p className="muted small">Checking {tool.replace(/_/g, ' ')}…</p>}
