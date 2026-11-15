@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useApi } from '../api'
 import type { Metrics } from '../types'
 import { Loading, Page } from '../ui'
@@ -11,10 +12,21 @@ const GUARDRAIL_LABELS: Record<string, string> = {
 }
 
 export function MetricsView() {
-  const { data, error } = useApi<Metrics>('/api/metrics')
+  const [simulated, setSimulated] = useState(false)
+  const { data, error } = useApi<Metrics>(simulated ? '/api/metrics?simulate_weeks=true' : '/api/metrics')
   if (!data) return <Loading error={error} />
   return (
     <Page title="Metrics" lede={`Week ${data.week}. Ranges show how sure we are; small samples get wide ranges.`}>
+      <div className="callout">
+        <span>
+          {simulated
+            ? 'Showing 2 weeks of simulated history (sample data, not saved).'
+            : 'See what Chipi learns after two weeks of outreach.'}
+        </span>
+        <button className="btn btn-primary" onClick={() => setSimulated((s) => !s)}>
+          {simulated ? 'Back to today' : 'Simulate 2 weeks'}
+        </button>
+      </div>
       <div className="grid2">
         {data.headline.map((m) => (
           <div key={m.name} className="card">

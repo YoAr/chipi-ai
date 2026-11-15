@@ -19,6 +19,11 @@ class Settings:
     # Built React app (served at /app/) and the landing page (served at /)
     web_dist: Path = REPO_ROOT / "frontend" / "dist"
     landing_file: Path = REPO_ROOT / "frontend" / "landing" / "index.html"
+    # OpenAI: the key itself is read by the SDK from OPENAI_API_KEY; we only note whether it is set.
+    openai_key_set: bool = False
+    model_smart: str = ""
+    model_check: str = ""
+    model_fast: str = ""
 
 
 def load_settings() -> Settings:
@@ -33,4 +38,8 @@ def load_settings() -> Settings:
         mock_stream_delay=float(os.getenv("MOCK_STREAM_DELAY", "0.03")),
         web_dist=Path(os.getenv("WEB_DIST", str(REPO_ROOT / "frontend" / "dist"))),
         landing_file=Path(os.getenv("LANDING_FILE", str(REPO_ROOT / "frontend" / "landing" / "index.html"))),
+        openai_key_set=bool(os.getenv("OPENAI_API_KEY", "").strip()),
+        model_smart=os.getenv("OPENAI_MODEL_SMART", "").strip(),
+        model_check=os.getenv("OPENAI_MODEL_CHECK", "").strip(),
+        model_fast=os.getenv("OPENAI_MODEL_FAST", "").strip(),
     )

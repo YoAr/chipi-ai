@@ -41,6 +41,15 @@ def test_every_read_route_serves_its_fixture(client, path, key):
     assert key in res.json()
 
 
+def test_health_reports_secret_presence_not_values(client):
+    body = client.get("/health").json()
+    assert body["ok"] is True
+    assert body["mode"] == "mock"
+    assert body["mcp_token_set"] is True
+    assert body["openai_key_set"] is False
+    assert TOKEN not in json.dumps(body)
+
+
 def test_leads_filter_by_status(client):
     client.post("/api/leads/ld_001/verdict", json={"verdict": "useful"})
     useful = client.get("/api/leads", params={"status": "useful"}).json()["leads"]
@@ -130,9 +139,30 @@ def test_chat_rejects_empty_messages(client):
 
 
 def test_cv_upload_adds_a_source(client):
-    res = client.post("/api/cv", files={"file": ("my-cv.pdf", b"%PDF-1.4 sample", "application/pdf")})
+    res = client.post("/api/cv", files={"file": ("my-cv.txt", b"Sam. Python engineer, 5 years.", "text/plain")})
     assert res.status_code == 200
-    assert any(s.endswith("my-cv.pdf") for s in res.json()["sources"])
+    assert any(s.endswith("my-cv.txt") for s in res.json()["sources"])
+
+
+def test_cv_upload_rejects_unreadable_files(client):
+    res = client.post("/api/cv", files={"file": ("cv.pdf", b"not really a pdf", "application/pdf")})
+    assert res.status_code == 415
+    assert res.json()["error"]["code"] == "unsupported_file"
+    assert client.post("/api/cv", files={"file": ("cv.exe", b"MZ", "application/octet-stream")}).status_code == 415
+
+
+def test_simulated_metrics_show_one_supported_lesson(client):
+    body = client.get("/api/metrics", params={"simulate_weeks": "true"}).json()
+    assert body["simulated"] is True
+    assert [h["direction"] for h in body["headline"]] == ["up", "down"]
+    assert any("Direct email" in lesson["text"] for lesson in body["learning"])
+
+
+def test_chat_is_rate_limited(client):
+    payload = {"messages": [{"role": "user", "content": "hi"}]}
+    codes = [client.post("/api/chat", json=payload).status_code for _ in range(21)]
+    assert codes[:20] == [200] * 20
+    assert codes[20] == 429
 
 
 def _site_client(tmp_path, with_files: bool) -> TestClient:
