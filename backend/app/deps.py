@@ -8,6 +8,7 @@ from fastapi import Request
 from starlette.exceptions import HTTPException
 
 from .config import Settings
+from .guards import client_ip
 
 
 def get_store(request: Request):
@@ -26,6 +27,5 @@ def require_real(request: Request) -> None:
 
 def limit_actions(request: Request) -> None:
     """Shared limit for expensive model actions: 10 per minute per client."""
-    key = request.client.host if request.client else "unknown"
-    if not request.app.state.action_limiter.check(key):
+    if not request.app.state.action_limiter.check(client_ip(request)):
         raise HTTPException(429, "Too many requests. Wait a minute and try again.")

@@ -90,3 +90,20 @@ class RateLimiter:
                 return False
             q.append(now)
             return True
+
+
+def client_ip(scope) -> str:
+    """The visitor's address, for rate limits.
+
+    On Fly every request reaches the app through Fly's proxy, so the socket address is
+    the proxy's and would put all visitors in one bucket. Fly sets `Fly-Client-IP` to
+    the real address, and the app is only reachable through that proxy. Locally there
+    is no such header and the socket address is used.
+    Accepts an ASGI scope or a Starlette Request (anything with `.scope`).
+    """
+    scope = getattr(scope, "scope", scope)
+    for name, value in scope.get("headers") or []:
+        if name == b"fly-client-ip" and value:
+            return value.decode("latin-1").strip()
+    client = scope.get("client")
+    return client[0] if client else "unknown"

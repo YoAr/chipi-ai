@@ -70,3 +70,35 @@ def test_check_endpoint(locked):
 def test_wrong_guesses_are_rate_limited(locked):
     codes = [locked.post("/api/passcode/check", json={"passcode": f"guess{i}"}).status_code for i in range(11)]
     assert codes[:10] == [401] * 10 and codes[10] == 429
+
+
+def test_blocked_guesser_cannot_tell_right_from_wrong(locked):
+    for i in range(10):
+        locked.post("/api/passcode/check", json={"passcode": f"guess{i}"})
+    # Over the limit: even the RIGHT passcode is refused, on both the check and a real change
+    assert locked.post("/api/passcode/check", json={"passcode": CODE}).status_code == 429
+    assert locked.post("/api/seeds", json=SEED, headers={"X-Demo-Passcode": CODE}).status_code == 429
+
+
+def test_wrong_guesses_on_changes_count_too(locked):
+    for i in range(10):
+        assert locked.post("/api/seeds", json=SEED, headers={"X-Demo-Passcode": f"g{i}"}).status_code == 401
+    assert locked.post("/api/seeds", json=SEED, headers={"X-Demo-Passcode": CODE}).status_code == 429
+
+
+def test_visitors_behind_fly_proxy_get_separate_limits(locked):
+    attacker = {"Fly-Client-IP": "203.0.113.9"}
+    for i in range(10):
+        locked.post("/api/passcode/check", json={"passcode": f"guess{i}"}, headers=attacker)
+    assert locked.post("/api/passcode/check", json={"passcode": CODE}, headers=attacker).status_code == 429
+    judge = {"Fly-Client-IP": "198.51.100.7"}  # same proxy, different visitor: not blocked
+    assert locked.post("/api/passcode/check", json={"passcode": CODE}, headers=judge).json() == {"ok": True}
+
+
+def test_chat_limit_is_per_visitor(tmp_path):
+    with make(tmp_path) as c:
+        payload = {"messages": [{"role": "user", "content": "hi"}]}
+        for _ in range(20):
+            c.post("/api/chat", json=payload, headers={"Fly-Client-IP": "203.0.113.9"})
+        assert c.post("/api/chat", json=payload, headers={"Fly-Client-IP": "203.0.113.9"}).status_code == 429
+        assert c.post("/api/chat", json=payload, headers={"Fly-Client-IP": "198.51.100.7"}).status_code == 200

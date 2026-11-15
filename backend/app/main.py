@@ -27,7 +27,7 @@ from .routes import drafts as draft_routes
 from .routes import profile as profile_routes
 from .routes import sample_cv as sample_cv_routes
 from .routes import search as search_routes
-from .guards import GuardError, RateLimiter, require_token
+from .guards import GuardError, RateLimiter, client_ip, require_token
 from .mcp_server import create_mcp, mount_mcp
 from .passcode import install as install_passcode
 from .metrics import compute_metrics
@@ -286,7 +286,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Chat (mock stream with the contract's event shapes) -------------------
     @app.post("/api/chat")
     async def chat(body: ChatIn, request: Request) -> StreamingResponse:
-        if not chat_limiter.check(request.client.host if request.client else "unknown"):
+        if not chat_limiter.check(client_ip(request)):
             raise StarletteHTTPException(429, "Too many messages. Wait a minute and try again.")
 
         async def not_connected() -> AsyncIterator[str]:
