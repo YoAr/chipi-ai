@@ -48,7 +48,11 @@ export function Leads() {
             <div key={l.id} className="row row-lead">
               <span className="score" title="Match score">{l.score ?? '—'}</span>
               <div className="grow">
-                <a href={l.url} target="_blank" rel="noreferrer"><b>{l.title}</b></a>
+                {/^https?:\/\//i.test(l.url) ? (
+                  <a href={l.url} target="_blank" rel="noreferrer"><b>{l.title}</b></a>
+                ) : (
+                  <b>{l.title}</b>
+                )}
                 <p className="muted small">
                   {sourceLabel(l.source)} · {l.rate_text ?? 'rate unknown'}
                   {!l.fetched && ' · not fetched yet'}

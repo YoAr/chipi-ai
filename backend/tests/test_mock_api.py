@@ -73,6 +73,28 @@ def test_seed_adds_an_unfetched_lead_first(client):
     assert client.get("/api/leads").json()["leads"][0]["url"] == "https://example.com/job/42"
 
 
+@pytest.mark.parametrize("bad", ["javascript:alert(document.cookie)//x", "data:text/html,hi", "not a url at all"])
+def test_seed_refuses_non_http_links(client, bad):
+    res = client.post("/api/seeds", json={"url": bad})
+    assert res.status_code == 422
+    assert all(lead["url"] != bad for lead in client.get("/api/leads").json()["leads"])
+
+
+def test_persona_update_accepts_known_fields(client):
+    res = client.put("/api/persona", json={"hours_per_week": 25, "income_goal_monthly": 12000})
+    assert res.status_code == 200
+    assert res.json()["hours_per_week"] == 25
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [{"skills": 42}, {"hours_per_week": "lots"}, {"hours_per_week": 500}, {"is_admin": True}],
+)
+def test_persona_update_rejects_bad_types_and_unknown_fields(client, bad):
+    assert client.put("/api/persona", json=bad).status_code == 422
+    assert client.get("/api/persona").json()["skills"] == ["Python", "FastAPI", "React", "LLM agents"]
+
+
 def test_approve_sends_with_the_edited_text(client):
     res = client.post("/api/drafts/dr_001/approve", json={"final_text": "Edited body"})
     assert res.json()["status"] == "sent"

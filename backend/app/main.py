@@ -15,7 +15,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import REPO_ROOT, Settings, load_settings
@@ -29,7 +29,23 @@ class VerdictIn(BaseModel):
 
 
 class SeedIn(BaseModel):
-    url: str = Field(min_length=8)
+    # http(s) only: the URL is rendered as a link, so javascript: and data: are refused
+    url: HttpUrl
+
+
+class PersonaIn(BaseModel):
+    """Fields the user may edit; anything else is rejected rather than stored."""
+
+    model_config = {"extra": "forbid"}
+    name: str | None = Field(default=None, max_length=120)
+    role: str | None = Field(default=None, max_length=120)
+    years: int | None = Field(default=None, ge=0, le=60)
+    location: str | None = Field(default=None, max_length=120)
+    skills: list[str] | None = Field(default=None, max_length=40)
+    wants: str | None = Field(default=None, max_length=500)
+    avoids: str | None = Field(default=None, max_length=500)
+    hours_per_week: int | None = Field(default=None, ge=1, le=80)
+    income_goal_monthly: int | None = Field(default=None, ge=0, le=1_000_000)
 
 
 class ApproveIn(BaseModel):
@@ -101,8 +117,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return store.get("persona")
 
     @app.put("/api/persona")
-    def update_persona(fields: dict) -> dict:
-        return store.update_persona(fields)
+    def update_persona(body: PersonaIn) -> dict:
+        return store.update_persona(body.model_dump(exclude_unset=True))
 
     @app.get("/api/fit")
     def fit() -> dict:
@@ -141,7 +157,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/seeds", status_code=201)
     def seed(body: SeedIn) -> dict:
-        return store.add_seed(body.url)
+        return store.add_seed(str(body.url))
 
     @app.post("/api/drafts/{draft_id}/approve")
     def approve(draft_id: str, body: ApproveIn) -> dict:
