@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege for the GITHUB_TOKEN in every job.
+permissions:
+  contents: read
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -42,12 +46,13 @@ jobs:
     concurrency:
       group: fly-deploy
       cancel-in-progress: false
-    env:
-      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    # The token is passed only to the two steps that need it, never job-wide.
     steps:
       - uses: actions/checkout@v4
       - name: Check for the Fly token
         id: token
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
           if [ -z "$FLY_API_TOKEN" ]; then
             echo "::notice::FLY_API_TOKEN is not set, so this push was not deployed."
@@ -55,10 +60,13 @@ jobs:
           else
             echo "present=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # Pinned to a commit SHA (release 1.6) so a moved tag can't change what runs.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
         if: steps.token.outputs.present == 'true'
       - name: Deploy to Fly
         if: steps.token.outputs.present == 'true'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: flyctl deploy --remote-only --app chipi-ai
       - name: Check the live site
         if: steps.token.outputs.present == 'true'
