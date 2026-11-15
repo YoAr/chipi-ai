@@ -31,7 +31,7 @@ It is the raw truth that lessons and metrics are computed from.
 
 ## What each event triggers
 
-| Event | Instantly (code) | Queued (Claude, via the routine) |
+| Event | Instantly (code) | Queued (model work, via the routine) |
 |---|---|---|
 | `reply_received` | Attach to lead, move in pipeline | Triage → draft response (urgent) |
 | `draft_edited` | Save version | Voice update after 3 edits; A/B the new template |

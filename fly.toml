@@ -1,34 +1,42 @@
-# fly.toml app configuration file generated for chipi-ai on 2026-11-15T21:35:13Z
-#
-# See https://docs.fly.io/reference/configuration for information about how to use this file.
-#
-
-app = 'chipi-ai'
-primary_region = 'iad'
+# Fly.io app: one always-on machine serving the landing page, app and API.
+# If the name "chipi-ai" is taken, change it here (and in CORS_ORIGINS).
+app = "chipi-ai"
+primary_region = "iad"
 
 [build]
-  dockerfile = 'Dockerfile'
+  dockerfile = "Dockerfile"
 
 [env]
-  CORS_ORIGINS = 'https://chipi-ai.fly.dev'
-  MOCK_MODE = '1'
+  MOCK_MODE = "1"
+  CORS_ORIGINS = "https://chipi-ai.fly.dev"
+  DATA_DIR = "/data"
+
+# The volume must exist BEFORE the deploy that adds this section, or the deploy fails.
+# One machine only (a volume attaches to one machine), region iad. Create it once:
+#   fly volumes create chipi_data --region iad --size 1 -a chipi-ai
+# DISABLED until the volume exists. To enable: create the volume, uncomment the three
+# lines below, push. (Mock mode does not use /data, so nothing is lost meanwhile.)
+# [mounts]
+#   source = "chipi_data"
+#   destination = "/data"
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = 'off'
+  # Never sleep: the laptop routine and judges must not hit a cold start.
+  auto_stop_machines = "off"
   auto_start_machines = true
   min_machines_running = 1
 
   [[http_service.checks]]
-    interval = '30s'
-    timeout = '5s'
-    grace_period = '10s'
-    method = 'GET'
-    path = '/health'
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
 
 [[vm]]
-  memory = '512mb'
-  cpu_kind = 'shared'
+  memory = "512mb"
+  cpu_kind = "shared"
   cpus = 1
-  memory_mb = 512
+  memory_mb = 512  # written by Fly Launch; same as memory above

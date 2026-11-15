@@ -5,7 +5,7 @@ Owners: **A** = backend + routine, **B** = frontend. Marks: **real** / **fake** 
 ## Hour 0–1 (together)
 - [ ] Agree `docs/contract.md` and `fixtures/` (both)
 - [x] Repo on GitHub (YoAr/chipi-ai); add your partner as a collaborator (both)
-- [ ] `.env` filled locally; Anthropic spend cap set (A)
+- [ ] `.env` filled locally (OpenAI key + model IDs); OpenAI usage limit set (A)
 
 ## Backend (A)
 - [x] FastAPI skeleton serving `fixtures/` at every `/api/*` route (mock mode), 18 tests — unblocks B
@@ -14,7 +14,7 @@ Owners: **A** = backend + routine, **B** = frontend. Marks: **real** / **fake** 
 - [ ] Tools: `ask_wiki`, `ingest`, `compute_pmf`, `suggest_rate` (real)
 - [ ] Tools: `search_opportunities` (RemoteOK, Remotive, HN) + `score_leads` (real)
 - [ ] Tools: `draft_outreach` + `verify_draft` (real)
-- [ ] `/api/chat` streaming with Tool Runner (real)
+- [ ] `/api/chat` streaming via the OpenAI Responses API with function tools (real)
 - [ ] `/mcp` exposing the same tools, token-protected (real)
 - [ ] `/hooks/email` inbound replies → event + queue (real if Resend inbound works, else fake)
 - [ ] Learner + metrics script (real logic, **fake** 2-week history via simulator)

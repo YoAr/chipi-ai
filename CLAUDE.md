@@ -18,11 +18,11 @@ Rules for writing code in this repo. Short on purpose; every rule matters.
 - **One writer.** Only the FastAPI app writes `/data`. The laptop routine changes
   data only through `/mcp` tools.
 - **Write each tool once, expose it twice.** Tool functions live in
-  `backend/tools/`; `/api/chat` uses them via the Anthropic Tool Runner, `/mcp`
-  exposes them via the MCP SDK. No logic in the route handlers.
+  `backend/tools/`; `/api/chat` offers them as function tools through the OpenAI
+  Responses API, `/mcp` exposes them via the MCP SDK. No logic in the route handlers.
 - **Events are append-only.** `data/events.jsonl` is never edited. Shape:
   `docs/events.md`.
-- **Code runs instantly, Claude runs from the queue.** Event handlers do cheap,
+- **Code runs instantly, the model runs from the queue.** Event handlers do cheap,
   deterministic work inline; anything needing a model is queued for the routine.
 - **Facts update instantly, beliefs at most daily.** Only the Learner writes
   `wiki/lessons.md` and the DERIVED goal.
@@ -30,10 +30,20 @@ Rules for writing code in this repo. Short on purpose; every rule matters.
 
 ## Models
 
-- `claude-opus-5-5`: judgment (fit, rate, offers, drafts, learning)
-- `claude-sonnet-5-5`: verifier, wiki lint
-- `claude-haiku-5-5`: bulk scoring, reply triage
-- Thinking is adaptive (don't send `budget_tokens`). Stream long calls.
+All model calls go to **OpenAI** through the official `openai` Python SDK and the
+**Responses API** (not Chat Completions; the Assistants API is retired). Model IDs
+are settings, never hard-coded; confirm them against `GET /v1/models` with your key.
+
+| Setting | Role | Used for |
+|---|---|---|
+| `OPENAI_MODEL_SMART` | Flagship | Fit, rate, offers, drafts, learning, chat |
+| `OPENAI_MODEL_CHECK` | Mid tier | Verifier, wiki lint |
+| `OPENAI_MODEL_FAST` | Smallest | Bulk lead scoring, reply triage |
+
+- Tools: function tools with strict JSON schemas, plus OpenAI's built-in web search tool.
+- Typed outputs: `client.responses.parse(...)` with a Pydantic model; never parse free text.
+- The verifier is a separate call with fresh context; the model that wrote a draft never grades it.
+- Stream long calls (chat, drafts) so requests don't time out.
 
 ## Contract
 

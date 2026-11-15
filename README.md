@@ -6,16 +6,18 @@ person, and gets better with every reply. Hackathon build.
 ## How it fits together
 
 ```
-Browser (React)  ⇄  Fly.io app (FastAPI + /data volume)  ←  Laptop (Claude Code routine)
+Browser (React)  ⇄  Fly.io app (FastAPI + /data volume)  ←  Laptop routine (Claude Code or Codex)
                       ├─ /api/*     the UI's API
-                      ├─ /api/chat  streamed Claude agent
+                      ├─ /api/chat  streamed agent (OpenAI Responses API)
                       ├─ /mcp       the same tools, for the routine
                       └─ /hooks/email  inbound replies
 ```
 
 - The **Fly app is the only writer of data** (`/data`: wiki, events, SQLite).
-- The **laptop routine** (Claude Code scheduled task / `/loop`) does the heavy
-  agent work by calling the app's `/mcp` tools.
+- **Models: OpenAI** (see `CLAUDE.md` → Models). All model calls happen inside the
+  app's tools, so the routine never needs its own model key.
+- The **laptop routine** (a scheduled task in Claude Code or Codex) is only a timer:
+  it calls the app's `/mcp` tools, which do the work.
 - **Single user, no login.** Guardrails instead: MCP token, API spend cap, chat
   rate limit, email allowlist.
 
@@ -69,11 +71,47 @@ after saving a new export over the old one.
 ## Deploy (Fly.io)
 
 One machine serves the landing page, app and API (see `Dockerfile`, `fly.toml`).
+Data lives on a Fly volume mounted at `/data` (`DATA_DIR=/data`).
 
 ```bash
 brew install flyctl
 fly auth login
 fly launch --no-deploy --copy-config --name chipi-ai   # first time only
-fly secrets set MCP_TOKEN=$(openssl rand -hex 24)
-fly deploy
+# Create the data volume BEFORE the first deploy that has [mounts] in fly.toml
+# (one machine, region iad):
+fly volumes create chipi_data --region iad --size 1 -a chipi-ai
+```
+
+Deploys happen by pushing to `main`: Fly's GitHub integration builds and deploys
+the root `Dockerfile`. CI (`.github/workflows/ci.yml`: backend tests, frontend
+build, docker build) must be green before merging.
+
+## Operations
+
+**Secrets.** Set in the Fly dashboard: app `chipi-ai` → Secrets → Deploy secrets
+(they are available to the build and runtime, so GitHub-integration deploys get them).
+
+| Secret | Required | Purpose |
+|---|---|---|
+| `OPENAI_API_KEY` | yes | All model calls |
+| `MCP_TOKEN` | yes | Bearer token for `/mcp` and `POST /api/reset` |
+| `RESEND_API_KEY` | optional | Sending email |
+| `EMAIL_ALLOWLIST` | optional | Comma-separated recipients the demo may email |
+
+**Snapshots and restore.** Fly snapshots the volume daily; take one before risky changes.
+
+```bash
+fly volumes list -a chipi-ai
+fly volumes snapshots list <volume-id> -a chipi-ai
+fly volumes snapshots create <volume-id> -a chipi-ai
+# Restore: create a new volume from a snapshot, then point the machine at it
+fly volumes create chipi_data --region iad --snapshot-id <snapshot-id> -a chipi-ai
+```
+
+**Logs.** `fly logs -a chipi-ai`, or dashboard → Monitoring.
+
+**Reset to seed data.** `POST /api/reset` with the MCP token:
+
+```bash
+curl -X POST https://chipi-ai.fly.dev/api/reset -H "Authorization: Bearer $MCP_TOKEN"
 ```

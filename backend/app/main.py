@@ -5,21 +5,60 @@ Only mock mode exists so far: every route serves fixtures/ (see docs/contract.md
 """
 
 import asyncio
-import hmac
 import json
 from typing import AsyncIterator, Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Header, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import REPO_ROOT, Settings, load_settings
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+
+from .cv import extract_text
+from .guards import GuardError, RateLimiter, require_token
+from .mcp_server import create_mcp, mount_mcp
+from .metrics import compute_metrics
 from .mock_store import MockStore, NotFound
+from .openai_check import STATUS as OPENAI_STATUS
+from .openai_check import check_models
+from .simulate import simulate
+from .storage import RealStore
+from .storage import queue as work_queue
+from .storage.events import read_events
+from .storage.wiki import save_raw
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+# "Simulate 2 weeks" demo: channel reply rates chosen so one lesson clears the
+# Learner's confidence bar (see tests/test_metrics.py for the no-false-lesson check).
+DEMO_TRUE_RATES = {"Direct email": 0.65, "HN Who's Hiring": 0.45, "Web search": 0.3, "RemoteOK": 0.1}
+DEMO_SIM = {"days": 14, "seed": 3, "sends_per_day": 6}
+
+
+def _iso_week(now: datetime) -> str:
+    year, week, _ = now.isocalendar()
+    return f"{year}-W{week:02d}"
+
+
+class _QueueAdapter:
+    """What the MCP tools need: pending() and complete(). Mock mode has no queue."""
+
+    def __init__(self, store):
+        self.store = store
+
+    def pending(self) -> list[dict]:
+        return work_queue.pending(self.store.conn) if isinstance(self.store, RealStore) else []
+
+    def complete(self, id: int, ok: bool, error: str | None = None) -> dict:
+        if not isinstance(self.store, RealStore):
+            raise NotFound("Mock mode has no work queue")
+        return work_queue.complete(self.store.conn, id, ok, error)
 
 
 # Request bodies (shapes from docs/contract.md) ------------------------------
@@ -29,7 +68,23 @@ class VerdictIn(BaseModel):
 
 
 class SeedIn(BaseModel):
-    url: str = Field(min_length=8)
+    # http(s) only: the URL is rendered as a link, so javascript: and data: are refused
+    url: HttpUrl
+
+
+class PersonaIn(BaseModel):
+    """Fields the user may edit; anything else is rejected rather than stored."""
+
+    model_config = {"extra": "forbid"}
+    name: str | None = Field(default=None, max_length=120)
+    role: str | None = Field(default=None, max_length=120)
+    years: int | None = Field(default=None, ge=0, le=60)
+    location: str | None = Field(default=None, max_length=120)
+    skills: list[str] | None = Field(default=None, max_length=40)
+    wants: str | None = Field(default=None, max_length=500)
+    avoids: str | None = Field(default=None, max_length=500)
+    hours_per_week: int | None = Field(default=None, ge=1, le=80)
+    income_goal_monthly: int | None = Field(default=None, ge=0, le=1_000_000)
 
 
 class ApproveIn(BaseModel):
@@ -59,11 +114,20 @@ def _sse(event: dict) -> str:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
-    if not settings.mock_mode:
-        raise RuntimeError("Only mock mode is built so far. Set MOCK_MODE=1.")
+    if settings.mock_mode:
+        store = MockStore(settings.fixtures_dir)
+    else:
+        settings.data_dir.mkdir(parents=True, exist_ok=True)
+        store = RealStore(settings.data_dir, REPO_ROOT / "data")  # seeds data/ on first start
+    token_required = require_token(settings.mcp_token)
+    chat_limiter = RateLimiter(max_calls=20, per_seconds=60)
 
-    store = MockStore(settings.fixtures_dir)
-    app = FastAPI(title="Chipi API", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        await check_models(settings)
+        yield
+
+    app = FastAPI(title="Chipi API", version="0.2.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
@@ -84,12 +148,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(StarletteHTTPException)
     async def _http(_: Request, exc: StarletteHTTPException) -> JSONResponse:
-        code = {401: "unauthorized", 403: "forbidden", 404: "not_found"}.get(exc.status_code, "error")
+        code = {401: "unauthorized", 403: "forbidden", 404: "not_found", 413: "too_large",
+                415: "unsupported_file", 429: "rate_limited"}.get(exc.status_code, "error")
         return _error(exc.status_code, code, str(exc.detail))
+
+    @app.exception_handler(GuardError)
+    async def _blocked(_: Request, exc: GuardError) -> JSONResponse:
+        return _error(422, "blocked", str(exc))
+
+    @app.exception_handler(ValueError)
+    async def _conflict(_: Request, exc: ValueError) -> JSONResponse:
+        # e.g. approving a draft that is no longer pending
+        return _error(409, "conflict", str(exc))
 
     @app.get("/health")
     def health() -> dict:
-        return {"ok": True, "mode": "mock"}
+        # Reports whether secrets are present, never their values.
+        return {
+            "ok": True,
+            "mode": "mock" if settings.mock_mode else "real",
+            "openai_key_set": settings.openai_key_set,
+            "mcp_token_set": bool(settings.mcp_token),
+            "models": {
+                "smart": settings.model_smart or None,
+                "check": settings.model_check or None,
+                "fast": settings.model_fast or None,
+                "configured_ok": OPENAI_STATUS["configured_ok"],
+                "available": OPENAI_STATUS["available"],
+                "error": OPENAI_STATUS["error"],
+            },
+        }
 
     # Read routes -----------------------------------------------------------
     @app.get("/api/state")
@@ -101,8 +189,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return store.get("persona")
 
     @app.put("/api/persona")
-    def update_persona(fields: dict) -> dict:
-        return store.update_persona(fields)
+    def update_persona(body: PersonaIn) -> dict:
+        return store.update_persona(body.model_dump(exclude_unset=True))
 
     @app.get("/api/fit")
     def fit() -> dict:
@@ -125,8 +213,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return store.get("pipeline")
 
     @app.get("/api/metrics")
-    def metrics() -> dict:
-        return store.get("metrics")
+    def metrics(simulate_weeks: bool = False) -> dict:
+        # ?simulate_weeks=true: the "simulate 2 weeks" demo. Computed from a generated
+        # history in memory; nothing is written to the real events log.
+        if simulate_weeks:
+            events = simulate(true_rates=DEMO_TRUE_RATES, **DEMO_SIM)
+            last = datetime.fromisoformat(events[-1]["ts"].replace("Z", "+00:00"))
+            return {**compute_metrics(events, _iso_week(last)), "simulated": True}
+        if settings.mock_mode:
+            return store.get("metrics")
+        return compute_metrics(read_events(settings.data_dir), _iso_week(datetime.now(timezone.utc)))
 
     # Write routes ----------------------------------------------------------
     @app.post("/api/leads/{lead_id}/verdict")
@@ -137,11 +233,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def upload_cv(file: UploadFile = File(...)) -> dict:
         if not file.filename:
             raise StarletteHTTPException(400, "Choose a file to upload")
-        return store.add_cv(file.filename)
+        content = await file.read(MAX_UPLOAD_BYTES + 1)
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise StarletteHTTPException(413, "That file is over 10 MB")
+        try:
+            text = extract_text(file.filename, content)
+        except ValueError as exc:
+            raise StarletteHTTPException(415, str(exc)) from exc
+        if settings.mock_mode:
+            return store.add_cv(file.filename)
+        persona = store.add_cv(file.filename, content)
+        save_raw(settings.data_dir, f"{file.filename}.txt", text.encode())  # text for the model to read
+        return persona
 
     @app.post("/api/seeds", status_code=201)
     def seed(body: SeedIn) -> dict:
-        return store.add_seed(body.url)
+        return store.add_seed(str(body.url))
 
     @app.post("/api/drafts/{draft_id}/approve")
     def approve(draft_id: str, body: ApproveIn) -> dict:
@@ -151,17 +258,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def reject(draft_id: str, body: RejectIn) -> dict:
         return store.reject_draft(draft_id, body.note)
 
-    @app.post("/api/reset")
-    def reset(authorization: str = Header(default="")) -> dict:
-        expected = f"Bearer {settings.mcp_token}"
-        if not settings.mcp_token or not hmac.compare_digest(authorization, expected):
-            raise StarletteHTTPException(401, "A valid MCP_TOKEN bearer token is required")
+    @app.post("/api/reset", dependencies=[Depends(token_required)])
+    def reset() -> dict:
         store.reset()
         return {"ok": True}
 
     # Chat (mock stream with the contract's event shapes) -------------------
     @app.post("/api/chat")
-    async def chat(body: ChatIn) -> StreamingResponse:
+    async def chat(body: ChatIn, request: Request) -> StreamingResponse:
+        if not chat_limiter.check(request.client.host if request.client else "unknown"):
+            raise StarletteHTTPException(429, "Too many messages. Wait a minute and try again.")
+
+        async def not_connected() -> AsyncIterator[str]:
+            yield _sse({"type": "error", "message": "Chat isn't connected to the model yet."})
+            yield _sse({"type": "done"})
+
+        if not settings.mock_mode:
+            return StreamingResponse(not_connected(), media_type="text/event-stream")
+
         async def events() -> AsyncIterator[str]:
             delay = settings.mock_stream_delay
             yield _sse({"type": "tool", "name": "suggest_rate", "status": "running"})
@@ -178,6 +292,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield _sse({"type": "done"})
 
         return StreamingResponse(events(), media_type="text/event-stream")
+
+    # Routine endpoint: same process, token-protected (see app/mcp_server.py)
+    mount_mcp(app, create_mcp(lambda: _QueueAdapter(store)), settings.mcp_token)
 
     # Website: landing page at "/", React app at "/app/" (registered last, after the API)
     if settings.landing_file.exists():
