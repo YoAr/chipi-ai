@@ -32,7 +32,8 @@ export function Onboarding({ go }: { go: (t: Tab) => void }) {
       <label className="dropzone" htmlFor="cv">
         <b>Upload your CV</b>
         <span className="muted">PDF or Word. It stays private to you.</span>
-        <input id="cv" type="file" accept=".pdf,.doc,.docx,.txt" onChange={(e) => upload(e.target.files?.[0])} />
+        <span className="btn btn-primary">Choose a file</span>
+        <input id="cv" className="sr-only" type="file" accept=".pdf,.docx,.txt,.md" onChange={(e) => upload(e.target.files?.[0])} />
       </label>
       {status && <p className="muted">{status}</p>}
 

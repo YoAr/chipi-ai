@@ -63,10 +63,18 @@ npm run dev        # http://localhost:5173/app/
 
 ## Landing page
 
-`frontend/landing/chipi-homepage.export.html` is the design export as delivered.
-`python3 scripts/build_landing.py` writes `frontend/landing/index.html` (served at
-`/`) with its "Upload your CV" and "Log in" links pointing at the app. Re-run it
-after saving a new export over the old one.
+`frontend/landing/index.html` is the page served at `/`: hand-written HTML/CSS (no
+build step) using the partner's copy, Chipi's colours and fonts, and illustrations in
+`frontend/landing/static/illustrations/` (served at `/static/...`).
+
+- **Illustrations** were generated with OpenAI `gpt-image-2` in Chipi's palette. They
+  have an opaque off-white background, so the page shows them on `--bg` (#f3f7f6)
+  with `mix-blend-mode: darken`; keep them on that background or the edges show.
+- **Motion:** hero float, staged "Example result" card, scroll reveals, and an
+  auto-advancing "How it works" with an illustration crossfade. All of it is off for
+  people who've asked their system to reduce motion.
+- **The original export** is kept as `chipi-homepage.export.html`;
+  `python3 scripts/build_landing.py` still turns it into `partner-landing.html` for reference.
 
 ## Deploy (Fly.io)
 

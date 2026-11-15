@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "frontend/landing/chipi-homepage.export.html"
-OUT = ROOT / "frontend/landing/index.html"
+OUT = ROOT / "frontend/landing/partner-landing.html"  # old bundle page; "/" serves the hand-built index.html
 
 # Landing-page anchor -> where it should go in the app
 LINKS = {

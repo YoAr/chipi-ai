@@ -44,7 +44,7 @@ export default function App() {
   return (
     <div className="shell">
       <header className="topbar">
-        <a className="wordmark" href="/">Chipi</a>
+        <a className="wordmark" href="/" aria-label="Chipi home"><span className="dot" aria-hidden="true" />Chipi</a>
         <span className="badge" title="The backend is serving sample data">Sample data</span>
         <button className="btn btn-primary" onClick={() => setChatOpen((o) => !o)}>
           {chatOpen ? 'Close chat' : 'Ask Chipi'}

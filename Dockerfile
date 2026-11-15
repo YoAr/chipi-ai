@@ -23,7 +23,8 @@ RUN cd backend && uv sync --frozen --no-dev --no-install-project
 COPY backend/ backend/
 COPY fixtures/ fixtures/
 COPY data/ data/
-COPY frontend/landing/index.html frontend/landing/index.html
+# Landing page, information pages and their assets (.dockerignore drops the old export files)
+COPY frontend/landing/ frontend/landing/
 COPY --from=web /srv/frontend/dist frontend/dist
 
 ENV MOCK_MODE=1 \

@@ -302,6 +302,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         def landing() -> FileResponse:
             return FileResponse(settings.landing_file, media_type="text/html")
 
+        # Information pages linked from the landing page footer
+        for slug, filename in (("privacy", "privacy.html"), ("how-we-use-ai", "how-we-use-ai.html"),
+                               ("numbers", "numbers.html"), ("contact", "contact.html")):
+            page = settings.landing_file.parent / filename
+            if page.exists():
+                app.add_api_route(f"/{slug}", lambda page=page: FileResponse(page, media_type="text/html"),
+                                  methods=["GET"], include_in_schema=False)
+
+        # Landing page assets (illustrations, shared CSS): frontend/landing/static -> /static
+        landing_static = settings.landing_file.parent / "static"
+        if landing_static.is_dir():
+            app.mount("/static", StaticFiles(directory=landing_static), name="landing-static")
+
     if (settings.web_dist / "index.html").exists():
         @app.get("/app", include_in_schema=False)
         def app_redirect() -> RedirectResponse:

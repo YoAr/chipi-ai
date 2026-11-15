@@ -5,6 +5,7 @@
 **/__pycache__
 frontend/dist
 frontend/landing/chipi-homepage.export.html
+frontend/landing/partner-landing.html
 runtime-data
 docs
 evals
