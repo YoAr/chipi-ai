@@ -15,14 +15,12 @@ primary_region = "iad"
   OPENAI_MODEL_CHECK = "gpt-6.1-sol"
   OPENAI_MODEL_FAST = "gpt-6-luna"
 
-# The volume must exist BEFORE the deploy that adds this section, or the deploy fails.
-# One machine only (a volume attaches to one machine), region iad. Create it once:
+# Data volume (created 2026-11-15: vol_vz867073oq9wq9qv, 1 GB, iad, encrypted).
+# One machine only: a volume attaches to a single machine. Recreate with:
 #   fly volumes create chipi_data --region iad --size 1 -a chipi-ai
-# DISABLED until the volume exists. To enable: create the volume, uncomment the three
-# lines below, push. (Mock mode does not use /data, so nothing is lost meanwhile.)
-# [mounts]
-#   source = "chipi_data"
-#   destination = "/data"
+[mounts]
+  source = "chipi_data"
+  destination = "/data"
 
 [http_service]
   internal_port = 8080
