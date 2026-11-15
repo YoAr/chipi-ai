@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useApi } from './api'
 import { Chat } from './Chat'
 import { ModeContext, type Mode } from './mode'
+import { PasscodeGate } from './Passcode'
 import type { State } from './types'
 import { Today } from './screens/Today'
 import { Onboarding } from './screens/Onboarding'
@@ -56,6 +57,8 @@ export default function App() {
           {chatOpen ? 'Close chat' : 'Ask Chipi'}
         </button>
       </header>
+
+      <PasscodeGate />
 
       <nav className="tabs" aria-label="Sections">
         {TABS.map(([id, label]) => (

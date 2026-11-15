@@ -1,10 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatEvent, Job } from './types'
 
+/* Demo passcode (public deploy only). Kept in this browser; sent with every change.
+   When the server asks for it, the app shows the passcode dialog (see Passcode.tsx). */
+const PASSCODE_KEY = 'chipi-demo-passcode'
+export const PASSCODE_NEEDED = 'chipi:passcode-needed'
+
+export function getPasscode(): string {
+  try { return localStorage.getItem(PASSCODE_KEY) ?? '' } catch { return '' }
+}
+export function setPasscode(value: string): void {
+  try { localStorage.setItem(PASSCODE_KEY, value) } catch { /* private mode: lasts for this page only */ }
+  memoryPasscode = value
+}
+let memoryPasscode = ''
+const passcodeHeader = (): Record<string, string> => {
+  const p = getPasscode() || memoryPasscode
+  return p ? { 'X-Demo-Passcode': p } : {}
+}
+
+function withPasscode(init?: RequestInit): RequestInit | undefined {
+  if (!init?.method || init.method === 'GET') return init
+  return { ...init, headers: { ...(init.headers as Record<string, string> | undefined), ...passcodeHeader() } }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init)
+  const res = await fetch(path, withPasscode(init))
   const body = await res.json().catch(() => null)
-  if (!res.ok) throw new Error(body?.error?.message ?? `Request failed (${res.status})`)
+  if (!res.ok) {
+    if (body?.error?.code === 'passcode_required') window.dispatchEvent(new Event(PASSCODE_NEEDED))
+    throw new Error(body?.error?.message ?? `Request failed (${res.status})`)
+  }
   return body as T
 }
 
@@ -105,9 +131,10 @@ export async function streamChat(
   messages: { role: 'user' | 'assistant'; content: string }[],
   onEvent: (e: ChatEvent) => void,
 ): Promise<void> {
-  const res = await fetch('/api/chat', json('POST', { messages }))
+  const res = await fetch('/api/chat', withPasscode(json('POST', { messages })))
   if (!res.ok || !res.body) {
     const body = await res.json().catch(() => null)
+    if (body?.error?.code === 'passcode_required') window.dispatchEvent(new Event(PASSCODE_NEEDED))
     onEvent({ type: 'error', message: body?.error?.message ?? `Chat failed (${res.status})` })
     return
   }

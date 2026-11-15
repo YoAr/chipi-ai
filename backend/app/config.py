@@ -24,6 +24,8 @@ class Settings:
     model_smart: str = ""
     model_check: str = ""
     model_fast: str = ""
+    # Demo passcode for changes (set on the public deploy only; empty = no passcode)
+    demo_passcode: str = ""
 
 
 def load_settings() -> Settings:
@@ -42,4 +44,5 @@ def load_settings() -> Settings:
         model_smart=os.getenv("OPENAI_MODEL_SMART", "").strip(),
         model_check=os.getenv("OPENAI_MODEL_CHECK", "").strip(),
         model_fast=os.getenv("OPENAI_MODEL_FAST", "").strip(),
+        demo_passcode=os.getenv("DEMO_PASSCODE", "").strip(),
     )
