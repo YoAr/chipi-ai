@@ -62,3 +62,37 @@ The same tool functions the chat uses, plus queue tools:
 ## Inbound email (`POST /hooks/email`)
 
 Resend inbound webhook. Appends a `reply_received` event and queues triage.
+
+## AI actions (real mode only; added for live mode)
+
+All of these answer **409** in sample-data mode, **429** past 10 actions per minute,
+and **503** `model_unavailable` if OpenAI can't be reached. Long work runs in the
+background: the POST returns **202** at once, and the UI polls the matching status.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/api/profile/build` | — | 202 `Job` |
+| GET | `/api/profile/status` | — | `Job` |
+| POST | `/api/search` | `{keywords?: string[]}` | 202 `Job` |
+| GET | `/api/search/status` | — | `Job` |
+| POST | `/api/leads/{id}/draft` | — | 202 `Job` |
+| GET | `/api/leads/{id}/draft/status` | — | `Job` (`result.draft_id` when done) |
+
+```
+Job { status: "idle" | "running" | "done" | "error",
+      step: string | null,        // e.g. "persona" → "fit" → "offers"; "fetching" → "scoring"
+      message: string | null,     // short, user-facing ("Found 23 leads, added 8")
+      error: string | null,
+      result: object | null,
+      updated_at: string | null }
+```
+
+- `POST /api/cv` (unchanged shape) also records the CV's text path; the UI then calls
+  `POST /api/profile/build`, which runs persona → fit & rate → offers and fills
+  `/api/persona`, `/api/fit`, `/api/offers` in the existing shapes.
+- `POST /api/search` fetches RemoteOK, Remotive and HN, de-duplicates, scores each new
+  lead (0–100 with a one-line `why`), and adds them to `/api/leads`.
+- `POST /api/leads/{id}/draft` writes an outreach draft, runs the verifier (code checks
+  plus a fresh-context model check), and adds it to `/api/drafts?status=pending` with its
+  `verifier.checks`.
+- `GET /api/state` → `mode` is `"real"` or `"mock"`; the UI hides AI buttons in `"mock"`.

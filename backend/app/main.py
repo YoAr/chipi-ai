@@ -21,7 +21,11 @@ from .config import REPO_ROOT, Settings, load_settings
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
+from .ai.client import AIUnavailable
 from .cv import extract_text
+from .routes import drafts as draft_routes
+from .routes import profile as profile_routes
+from .routes import search as search_routes
 from .guards import GuardError, RateLimiter, require_token
 from .mcp_server import create_mcp, mount_mcp
 from .metrics import compute_metrics
@@ -127,7 +131,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await check_models(settings)
         yield
 
-    app = FastAPI(title="Chipi API", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="Chipi API", version="0.3.0", lifespan=lifespan)
+    # Shared with the route modules in app/routes/ (see app/deps.py)
+    app.state.store = store
+    app.state.settings = settings
+    app.state.action_limiter = RateLimiter(max_calls=10, per_seconds=60)
+    app.include_router(profile_routes.router)
+    app.include_router(search_routes.router)
+    app.include_router(draft_routes.router)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
@@ -151,6 +162,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         code = {401: "unauthorized", 403: "forbidden", 404: "not_found", 413: "too_large",
                 415: "unsupported_file", 429: "rate_limited"}.get(exc.status_code, "error")
         return _error(exc.status_code, code, str(exc.detail))
+
+    @app.exception_handler(AIUnavailable)
+    async def _ai_down(_: Request, exc: AIUnavailable) -> JSONResponse:
+        return _error(503, "model_unavailable", str(exc))
 
     @app.exception_handler(GuardError)
     async def _blocked(_: Request, exc: GuardError) -> JSONResponse:
@@ -243,7 +258,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if settings.mock_mode:
             return store.add_cv(file.filename)
         persona = store.add_cv(file.filename, content)
-        save_raw(settings.data_dir, f"{file.filename}.txt", text.encode())  # text for the model to read
+        text_path = save_raw(settings.data_dir, f"{file.filename}.txt", text.encode())  # text for the model
+        store.set_setting("cv_text_path", text_path)  # the profile pipeline reads the latest CV from here
         return persona
 
     @app.post("/api/seeds", status_code=201)
@@ -274,7 +290,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield _sse({"type": "done"})
 
         if not settings.mock_mode:
-            return StreamingResponse(not_connected(), media_type="text/event-stream")
+            try:
+                from .ai.chat import stream_chat  # async generator of contract chat events
+            except ImportError:
+                return StreamingResponse(not_connected(), media_type="text/event-stream")
+            messages = [m.model_dump() for m in body.messages]
+
+            async def real_events() -> AsyncIterator[str]:
+                async for event in stream_chat(messages, store, settings):
+                    yield _sse(event)
+
+            return StreamingResponse(real_events(), media_type="text/event-stream")
 
         async def events() -> AsyncIterator[str]:
             delay = settings.mock_stream_delay

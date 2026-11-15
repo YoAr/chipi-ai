@@ -10,6 +10,8 @@ primary_region = "iad"
   MOCK_MODE = "1"
   CORS_ORIGINS = "https://chipi-ai.fly.dev"
   DATA_DIR = "/data"
+  # The OpenAI project uses US data residency: calls must go to the US host.
+  OPENAI_BASE_URL = "https://us.api.openai.com/v1"
   # OpenAI models (checked against this key's /v1/models on 2026-11-15)
   OPENAI_MODEL_SMART = "gpt-6-astra"
   OPENAI_MODEL_CHECK = "gpt-6.1-sol"
