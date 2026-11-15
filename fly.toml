@@ -39,3 +39,4 @@ primary_region = "iad"
   memory = "512mb"
   cpu_kind = "shared"
   cpus = 1
+  memory_mb = 512  # written by Fly Launch; same as memory above
