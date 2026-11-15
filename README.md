@@ -36,4 +36,44 @@ Browser (React)  ⇄  Fly.io app (FastAPI + /data volume)  ←  Laptop (Claude C
 
 ## Run locally
 
-Not runnable yet. See `TODO.md` for the build order.
+The backend runs in **mock mode**: every `/api/*` route serves `fixtures/`, and
+writes (verdicts, approvals, seeds) change an in-memory copy so the UI can click
+through. `POST /api/reset` or a restart restores the fixtures.
+
+```bash
+cd backend
+uv sync
+uv run uvicorn app.main:app --reload --port 8010
+```
+
+- Landing page: http://localhost:8010/ · app: http://localhost:8010/app/ (after `npm run build` in `frontend/`)
+- API: http://localhost:8010/api/state · interactive docs: http://localhost:8010/docs
+- Tests: `uv run pytest -q`
+- Port 8010, because 8000 is often taken by other Docker projects.
+
+Frontend with hot reload (calls the backend through Vite's `/api` proxy):
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173/app/
+```
+
+## Landing page
+
+`frontend/landing/chipi-homepage.export.html` is the design export as delivered.
+`python3 scripts/build_landing.py` writes `frontend/landing/index.html` (served at
+`/`) with its "Upload your CV" and "Log in" links pointing at the app. Re-run it
+after saving a new export over the old one.
+
+## Deploy (Fly.io)
+
+One machine serves the landing page, app and API (see `Dockerfile`, `fly.toml`).
+
+```bash
+brew install flyctl
+fly auth login
+fly launch --no-deploy --copy-config --name chipi-ai   # first time only
+fly secrets set MCP_TOKEN=$(openssl rand -hex 24)
+fly deploy
+```
