@@ -31,3 +31,40 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build image (no push)
         run: docker build -t chipi-ai:ci .
+
+  # Ships main to Fly once every check above has passed. Needs the repo secret
+  # FLY_API_TOKEN (Fly dashboard → Tokens → deploy token for chipi-ai). Without it,
+  # this job skips with a notice instead of failing CI.
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend, docker]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: fly-deploy
+      cancel-in-progress: false
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for the Fly token
+        id: token
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::notice::FLY_API_TOKEN is not set, so this push was not deployed."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: steps.token.outputs.present == 'true'
+      - name: Deploy to Fly
+        if: steps.token.outputs.present == 'true'
+        run: flyctl deploy --remote-only --app chipi-ai
+      - name: Check the live site
+        if: steps.token.outputs.present == 'true'
+        run: |
+          for i in $(seq 1 20); do
+            if curl -sf https://chipi-ai.fly.dev/health; then echo; exit 0; fi
+            sleep 6
+          done
+          echo "::error::chipi-ai.fly.dev/health did not respond after the deploy"; exit 1
