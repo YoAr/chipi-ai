@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import type { ChatEvent } from './types'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ChatEvent, Job } from './types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init)
@@ -43,6 +43,61 @@ export function useApi<T>(path: string) {
   }, [path, tick])
 
   return { data, error, reload: () => setTick((t) => t + 1) }
+}
+
+const POLL_MS = 1500
+
+/**
+ * Start a background action (POST → 202 Job) and poll its status until it finishes.
+ * Picks up an action that is already running when the screen opens.
+ * onFinish runs once when a run ends in "done".
+ */
+export function useJob(startPath: string, statusPath: string, onFinish?: (job: Job) => void, enabled = true) {
+  const [job, setJob] = useState<Job | null>(null)
+  const [startError, setStartError] = useState<string | null>(null)
+  const timer = useRef<number | null>(null)
+  const finishRef = useRef(onFinish)
+  finishRef.current = onFinish
+
+  const poll = useCallback(async () => {
+    try {
+      const j = await api.get<Job>(statusPath)
+      setJob(j)
+      if (j.status === 'running') {
+        timer.current = window.setTimeout(poll, POLL_MS)
+      } else if (j.status === 'done') {
+        finishRef.current?.(j)
+      }
+    } catch (e) {
+      setStartError((e as Error).message)
+    }
+  }, [statusPath])
+
+  useEffect(() => {
+    if (!enabled) return
+    // Resume an action that's already running (e.g. after a page reload)
+    api.get<Job>(statusPath).then((j) => {
+      setJob(j)
+      if (j.status === 'running') timer.current = window.setTimeout(poll, POLL_MS)
+    }).catch(() => undefined)
+    return () => {
+      if (timer.current) window.clearTimeout(timer.current)
+    }
+  }, [statusPath, poll, enabled])
+
+  const start = useCallback(async (body?: unknown) => {
+    setStartError(null)
+    try {
+      const j = await api.post<Job>(startPath, body ?? {})
+      setJob(j)
+      if (timer.current) window.clearTimeout(timer.current)
+      timer.current = window.setTimeout(poll, j.status === 'running' ? POLL_MS : 0)
+    } catch (e) {
+      setStartError((e as Error).message)
+    }
+  }, [startPath, poll])
+
+  return { job, start, running: job?.status === 'running', startError }
 }
 
 /** POST /api/chat and call onEvent for each server-sent event. */

@@ -1,14 +1,27 @@
 import { useApi } from '../api'
+import type { Tab } from '../App'
 import type { Fit } from '../types'
-import { Checks, Loading, Page } from '../ui'
+import { Checks, Empty, Loading, Page } from '../ui'
 
 const SCALE_MAX = 200 // $/hour shown on the rate bar
 
-export function FitRate() {
+export function FitRate({ go }: { go: (t: Tab) => void }) {
   const { data, error } = useApi<Fit>('/api/fit')
   if (!data) return <Loading error={error} />
   const { rate } = data
   const pct = (v: number) => `${Math.min(100, (v / SCALE_MAX) * 100)}%`
+
+  if (rate.low == null || rate.high == null || rate.ask == null || rate.floor == null) {
+    return (
+      <Page title="Fit & rate" lede="What to sell, what to charge, and why.">
+        <Empty title="No rate yet"
+               action={<button className="btn btn-primary" onClick={() => go('onboarding')}>Go to your profile</button>}>
+          Chipi works out where you fit and what to charge once it has read your CV.
+          {rate.floor != null && ` It will never suggest less than your floor of $${rate.floor}/hour.`}
+        </Empty>
+      </Page>
+    )
+  }
 
   return (
     <Page title="Fit & rate" lede="What to sell, what to charge, and why.">
@@ -44,10 +57,12 @@ export function FitRate() {
         </div>
       </div>
 
-      <div className="card">
-        <h3>Checks before showing you this</h3>
-        <Checks checks={data.goal_checks} />
-      </div>
+      {data.goal_checks.length > 0 && (
+        <div className="card">
+          <h3>Checks before showing you this</h3>
+          <Checks checks={data.goal_checks} />
+        </div>
+      )}
     </Page>
   )
 }

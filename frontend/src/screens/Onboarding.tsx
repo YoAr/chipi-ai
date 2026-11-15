@@ -1,20 +1,28 @@
 import { useState } from 'react'
-import { api, useApi } from '../api'
+import { api, useApi, useJob } from '../api'
 import type { Tab } from '../App'
+import { useIsReal } from '../mode'
 import type { Persona } from '../types'
-import { Loading, Page } from '../ui'
+import { Empty, JobStatus, Loading, Page } from '../ui'
 
 export function Onboarding({ go }: { go: (t: Tab) => void }) {
+  const real = useIsReal()
   const persona = useApi<Persona>('/api/persona')
   const [status, setStatus] = useState<string | null>(null)
+  const build = useJob('/api/profile/build', '/api/profile/status', () => persona.reload(), real)
 
   async function upload(file: File | undefined) {
     if (!file) return
-    setStatus(`Reading ${file.name}…`)
+    setStatus(`Uploading ${file.name}…`)
     try {
       await api.upload<Persona>('/api/cv', file)
-      setStatus(`Added ${file.name}. Your profile is below.`)
       persona.reload()
+      if (real) {
+        setStatus(null)
+        await build.start() // CV → persona → fit & rate → offers
+      } else {
+        setStatus(`Added ${file.name}. Your profile is below.`)
+      }
     } catch (e) {
       setStatus(`Upload failed: ${(e as Error).message}`)
     }
@@ -27,36 +35,50 @@ export function Onboarding({ go }: { go: (t: Tab) => void }) {
     persona.reload()
   }
 
+  const p = persona.data
+  const hasProfile = !!p && (p.name || p.role || p.skills.length > 0)
+  const hasCv = !!p && p.sources.length > 0
+  const facts = p ? [p.role, p.years != null ? `${p.years} years` : '', p.location].filter(Boolean).join(' · ') : ''
+
   return (
     <Page title="Your profile" lede="Upload your CV and answer two questions. Chipi builds the rest.">
       <label className="dropzone" htmlFor="cv">
-        <b>Upload your CV</b>
+        <b>{hasCv ? 'Upload a newer CV' : 'Upload your CV'}</b>
         <span className="muted">PDF or Word. It stays private to you.</span>
         <span className="btn btn-primary">Choose a file</span>
-        <input id="cv" className="sr-only" type="file" accept=".pdf,.docx,.txt,.md" onChange={(e) => upload(e.target.files?.[0])} />
+        <input id="cv" className="sr-only" type="file" accept=".pdf,.docx,.txt,.md" disabled={build.running}
+               onChange={(e) => upload(e.target.files?.[0])} />
       </label>
       {status && <p className="muted">{status}</p>}
+      <JobStatus job={build.job} startError={build.startError} />
+      {real && hasCv && !build.running && build.job?.status !== 'done' && (
+        <div><button className="btn" onClick={() => build.start()}>Rebuild my profile from this CV</button></div>
+      )}
 
-      {!persona.data ? (
+      {!p ? (
         <Loading error={persona.error} />
+      ) : !hasProfile ? (
+        <Empty title="No profile yet">
+          {hasCv ? 'Your CV is uploaded. Your profile appears here once Chipi has read it.' : 'Upload your CV above and Chipi reads it for you.'}
+        </Empty>
       ) : (
         <div className="card">
-          <h2>{persona.data.name}</h2>
-          <p>{persona.data.role} · {persona.data.years} years · {persona.data.location}</p>
-          <div className="chips">{persona.data.skills.map((s) => <span key={s} className="chip">{s}</span>)}</div>
-          <p><b>Wants:</b> {persona.data.wants}</p>
-          <p><b>Avoids:</b> {persona.data.avoids}</p>
+          <h2>{p.name || 'Your profile'}</h2>
+          {facts && <p>{facts}</p>}
+          {p.skills.length > 0 && <div className="chips">{p.skills.map((s) => <span key={s} className="chip">{s}</span>)}</div>}
+          {p.wants && <p><b>Wants:</b> {p.wants}</p>}
+          {p.avoids && <p><b>Avoids:</b> {p.avoids}</p>}
           <div className="fields">
             <label>
               Hours a week
-              <input type="number" min={1} max={80} defaultValue={persona.data.hours_per_week ?? ''} onBlur={(e) => save('hours_per_week', e.target.value)} />
+              <input type="number" min={1} max={80} defaultValue={p.hours_per_week ?? ''} onBlur={(e) => save('hours_per_week', e.target.value)} />
             </label>
             <label>
               Monthly income goal ($)
-              <input type="number" min={0} step={500} defaultValue={persona.data.income_goal_monthly ?? ''} onBlur={(e) => save('income_goal_monthly', e.target.value)} />
+              <input type="number" min={0} step={500} defaultValue={p.income_goal_monthly ?? ''} onBlur={(e) => save('income_goal_monthly', e.target.value)} />
             </label>
           </div>
-          <p className="muted small">Built from: {persona.data.sources.join(', ')}</p>
+          {p.sources.length > 0 && <p className="muted small">Built from: {p.sources.join(', ')}</p>}
           <div><button className="btn btn-primary" onClick={() => go('fit')}>Looks right → see my fit and rate</button></div>
         </div>
       )}

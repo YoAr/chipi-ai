@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
+import { useApi } from './api'
 import { Chat } from './Chat'
+import { ModeContext, type Mode } from './mode'
+import type { State } from './types'
 import { Today } from './screens/Today'
 import { Onboarding } from './screens/Onboarding'
 import { FitRate } from './screens/FitRate'
@@ -40,12 +43,15 @@ function useHashTab(): [Tab, (t: Tab) => void] {
 export default function App() {
   const [tab, go] = useHashTab()
   const [chatOpen, setChatOpen] = useState(false)
+  const state = useApi<State>('/api/state')
+  const mode: Mode = state.data ? (state.data.mode === 'real' ? 'real' : 'mock') : 'unknown'
 
   return (
+    <ModeContext.Provider value={mode}>
     <div className="shell">
       <header className="topbar">
         <a className="wordmark" href="/" aria-label="Chipi home"><span className="dot" aria-hidden="true" />Chipi</a>
-        <span className="badge" title="The backend is serving sample data">Sample data</span>
+        {mode === 'mock' && <span className="badge" title="The backend is serving sample data">Sample data</span>}
         <button className="btn btn-primary" onClick={() => setChatOpen((o) => !o)}>
           {chatOpen ? 'Close chat' : 'Ask Chipi'}
         </button>
@@ -63,15 +69,16 @@ export default function App() {
         <main className="main">
           {tab === 'today' && <Today go={go} />}
           {tab === 'onboarding' && <Onboarding go={go} />}
-          {tab === 'fit' && <FitRate />}
-          {tab === 'offers' && <Offers />}
-          {tab === 'leads' && <Leads />}
-          {tab === 'drafts' && <Drafts />}
+          {tab === 'fit' && <FitRate go={go} />}
+          {tab === 'offers' && <Offers go={go} />}
+          {tab === 'leads' && <Leads go={go} />}
+          {tab === 'drafts' && <Drafts go={go} />}
           {tab === 'pipeline' && <PipelineView />}
           {tab === 'metrics' && <MetricsView />}
         </main>
         {chatOpen && <Chat />}
       </div>
     </div>
+    </ModeContext.Provider>
   )
 }

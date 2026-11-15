@@ -11,9 +11,17 @@ export function Today({ go }: { go: (t: Tab) => void }) {
   if (!state.data) return <Loading error={state.error} />
   const { profile, today } = state.data
   const top = [...(leads.data?.leads ?? [])].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, 3)
+  const noProfile = !profile.name && !profile.headline
 
   return (
-    <Page title={`Good morning, ${profile.name}`} lede={profile.headline}>
+    <Page title={profile.name ? `Good morning, ${profile.name}` : 'Good morning'}
+          lede={profile.headline || 'Start with your CV. Chipi works out what you could sell and what to charge.'}>
+      {noProfile && (
+        <div className="callout">
+          <span>No profile yet. It takes about 5 minutes.</span>
+          <button className="btn btn-primary" onClick={() => go('onboarding')}>Upload your CV</button>
+        </div>
+      )}
       <div className="stats">
         <button className="stat" onClick={() => go('leads')}><b>{today.new_leads}</b>new leads</button>
         <button className="stat" onClick={() => go('drafts')}><b>{today.drafts_pending}</b>drafts to approve</button>
@@ -32,7 +40,11 @@ export function Today({ go }: { go: (t: Tab) => void }) {
             </div>
           </div>
         ))}
-        {top.length === 0 && <p className="muted">No new leads. The next search runs at 8 am.</p>}
+        {top.length === 0 && (
+          <p className="muted">
+            No new leads yet. <button className="link-btn" onClick={() => go('leads')}>Find leads</button>
+          </p>
+        )}
       </div>
 
       {(drafts.data?.drafts.length ?? 0) > 0 && (

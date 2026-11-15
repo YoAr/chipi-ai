@@ -12,7 +12,7 @@ export type State = {
 export type Persona = {
   name: string
   role: string
-  years: number
+  years: number | null
   location: string
   skills: string[]
   wants: string
@@ -22,13 +22,24 @@ export type Persona = {
   sources: string[]
 }
 
+/** Background action status (docs/contract.md → AI actions). */
+export type Job = {
+  status: 'idle' | 'running' | 'done' | 'error'
+  step: string | null
+  message: string | null
+  error: string | null
+  result: Record<string, unknown> | null
+  updated_at: string | null
+}
+
 export type Fit = {
   fits: { name: string; level: 'high' | 'medium' | 'low'; reason: string; sources: string[] }[]
   rate: {
-    floor: number
-    ask: number
-    low: number
-    high: number
+    // null until the profile has been built (real mode starts empty)
+    floor: number | null
+    ask: number | null
+    low: number | null
+    high: number | null
     currency: string
     unit: string
     reasons: { text: string; source: string }[]
