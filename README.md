@@ -6,16 +6,18 @@ person, and gets better with every reply. Hackathon build.
 ## How it fits together
 
 ```
-Browser (React)  ⇄  Fly.io app (FastAPI + /data volume)  ←  Laptop (Claude Code routine)
+Browser (React)  ⇄  Fly.io app (FastAPI + /data volume)  ←  Laptop routine (Claude Code or Codex)
                       ├─ /api/*     the UI's API
-                      ├─ /api/chat  streamed Claude agent
+                      ├─ /api/chat  streamed agent (OpenAI Responses API)
                       ├─ /mcp       the same tools, for the routine
                       └─ /hooks/email  inbound replies
 ```
 
 - The **Fly app is the only writer of data** (`/data`: wiki, events, SQLite).
-- The **laptop routine** (Claude Code scheduled task / `/loop`) does the heavy
-  agent work by calling the app's `/mcp` tools.
+- **Models: OpenAI** (see `CLAUDE.md` → Models). All model calls happen inside the
+  app's tools, so the routine never needs its own model key.
+- The **laptop routine** (a scheduled task in Claude Code or Codex) is only a timer:
+  it calls the app's `/mcp` tools, which do the work.
 - **Single user, no login.** Guardrails instead: MCP token, API spend cap, chat
   rate limit, email allowlist.
 

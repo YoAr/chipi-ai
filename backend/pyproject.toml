@@ -9,6 +9,7 @@ dependencies = [
   "python-dotenv>=1.0",
   "pydantic>=2.7",
   "python-multipart>=0.0.9",
+  "openai>=1.60",
 ]
 
 [dependency-groups]
