@@ -30,6 +30,12 @@ a:hover { color: var(--accent-dark); }
 /* Page */
 .page-head { background: var(--bg); padding: 64px 0 48px; }
 .page-head .wrap { display: flex; flex-direction: column; gap: 14px; }
+/* Breadcrumb: "← Home › Page" at the top of each information page */
+.crumbs ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.crumbs li + li::before { content: "›"; margin-right: 8px; color: var(--line-strong); }
+.crumbs a { color: var(--accent); font-weight: 600; text-decoration: none; display: inline-flex; gap: 6px; }
+.crumbs a:hover { text-decoration: underline; }
+.crumbs [aria-current="page"] { color: var(--text); }
 .eyebrow { align-self: flex-start; font-size: 13px; font-weight: 600; color: var(--accent-dark); background: var(--mint); border-radius: 999px; padding: 5px 12px; }
 h1, h2, h3 { font-family: var(--display); color: var(--ink); line-height: 1.12; letter-spacing: -0.02em; text-wrap: balance; }
 h1 { font-size: clamp(36px, 5vw, 56px); font-weight: 800; margin: 0; max-width: 22ch; }

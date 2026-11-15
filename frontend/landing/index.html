@@ -120,24 +120,36 @@ section { padding: 104px 0; }
 .num { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-family: var(--display); }
 @media (max-width: 760px) { .two { grid-template-columns: minmax(0, 1fr); } }
 
-/* How it works: auto-advancing steps with an illustration crossfade */
-.steps { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 48px; align-items: center; }
-.step-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.step-btn { width: 100%; text-align: left; font: inherit; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 16px; padding: 18px 20px; cursor: pointer; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 16px; position: relative; overflow: hidden; transition: background .2s, border-color .2s; }
-.step-btn .num { grid-row: span 2; background: var(--mint); color: var(--accent-dark); transition: background .2s, color .2s; }
-.step-btn h3 { font-size: 20px; }
-.step-btn p { color: var(--muted); font-size: 15px; display: none; }
-.step-btn[aria-selected="true"] { background: var(--surface); border-color: var(--line); box-shadow: 0 12px 30px -24px rgba(19,32,28,.5); }
-.step-btn[aria-selected="true"] .num { background: var(--accent); color: #fff; }
-.step-btn[aria-selected="true"] p { display: block; }
-.progress { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--accent); }
-.step-btn[aria-selected="true"] .progress { animation: fill var(--step-ms, 5500ms) linear forwards; }
-.paused .step-btn[aria-selected="true"] .progress { animation-play-state: paused; }
-@keyframes fill { to { width: 100%; } }
-.step-stage { position: relative; aspect-ratio: 1 / 1; max-width: 520px; width: 100%; margin: 0 auto; border-radius: 28px; background: radial-gradient(circle at 50% 55%, var(--mint) 0%, rgba(220,235,231,0) 68%); }
+/* How it works: scroll-driven. Each step gets its own stretch of page; the step crossing the middle of
+   the screen becomes active, its illustration shows in the pinned stage, and the line on the left fills. */
+.steps { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 56px; align-items: start; }
+.step-track { position: relative; }
+.track-line { position: absolute; left: 37px; width: 2px; margin-left: -1px; background: var(--line-strong); border-radius: 2px; }
+.track-fill { position: absolute; left: 0; top: 0; width: 100%; height: 0; background: var(--accent); border-radius: 2px; transition: height .45s cubic-bezier(.2,.7,.2,1); }
+.step-list { list-style: none; margin: 0; padding: 0; }
+.step { min-height: 52vh; display: flex; align-items: center; }
+.step-card { position: relative; z-index: 1; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 16px; padding: 18px 20px; border-radius: 16px; border: 1px solid transparent; transition: opacity .35s ease, background .35s ease, border-color .35s ease, box-shadow .35s ease; }
+.step-card .num { grid-row: span 2; background: var(--mint); color: var(--accent-dark); transition: background .35s ease, color .35s ease; }
+.step-card h3 { font-size: 22px; align-self: center; }
+.step-card p { grid-column: 2; color: var(--muted); font-size: 16px; }
+.step.active .step-card { background: var(--surface); border-color: var(--line); box-shadow: 0 16px 36px -26px rgba(19,32,28,.5); }
+.step.active .num { background: var(--accent); color: #fff; }
+.js .step:not(.active) .step-card { opacity: .4; }
+.step-img { display: none; }
+.stage-col { position: sticky; top: max(96px, calc(50vh - 250px)); }
+/* Solid --bg under the glow: the sticky column isolates blending, so the image needs an opaque backdrop here */
+.step-stage { position: relative; aspect-ratio: 1 / 1; max-width: 500px; width: 100%; margin: 0 auto; border-radius: 28px; background: radial-gradient(circle at 50% 55%, var(--mint) 0%, rgba(220,235,231,0) 68%), var(--bg); }
 .step-stage img { position: absolute; inset: 6%; width: 88%; height: 88%; object-fit: contain; opacity: 0; transform: scale(.94) translateY(10px); transition: opacity .5s ease, transform .6s cubic-bezier(.2,.7,.2,1); }
 .step-stage img.on { opacity: 1; transform: none; }
-@media (max-width: 860px) { .steps { grid-template-columns: minmax(0, 1fr); } .step-stage { order: -1; max-width: 360px; } }
+/* Phones: no pinned stage; each step shows its own illustration and every step stays fully visible */
+@media (max-width: 860px) {
+  .steps { grid-template-columns: minmax(0, 1fr); }
+  .stage-col { display: none; }
+  .step { min-height: 0; padding: 10px 0; }
+  .js .step:not(.active) .step-card { opacity: 1; }
+  .step.active .step-card { background: transparent; border-color: transparent; box-shadow: none; } /* keeps illustrations on the section colour */
+  .step-img { display: block; grid-column: 2; width: 200px; margin-top: 8px; }
+}
 
 /* Split sections (control, privacy) */
 .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: center; }
@@ -286,17 +298,22 @@ footer a:hover { color: var(--ink); }
         <p class="lede">Four steps. Each one gives you something you can use, even if you stop there.</p>
       </div>
       <div class="steps" data-steps>
-        <ol class="step-list" role="tablist" aria-label="Steps">
-          <li><button class="step-btn" role="tab" aria-selected="true" aria-controls="stage" data-img="cv"><span class="num">1</span><h3>Upload your CV</h3><p>A PDF or Word file is enough. Answer a few questions about the work you want.</p><span class="progress" aria-hidden="true"></span></button></li>
-          <li><button class="step-btn" role="tab" aria-selected="false" aria-controls="stage" data-img="rate"><span class="num">2</span><h3>See your offer and rate</h3><p>What you could sell, to whom, and what people in your field charge. Based on official Dutch income figures and rate surveys.</p><span class="progress" aria-hidden="true"></span></button></li>
-          <li><button class="step-btn" role="tab" aria-selected="false" aria-controls="stage" data-img="find"><span class="num">3</span><h3>Find who might hire you</h3><p>Companies that fit your offer, freelance jobs on platforms, and other freelancers who share work.</p><span class="progress" aria-hidden="true"></span></button></li>
-          <li><button class="step-btn" role="tab" aria-selected="false" aria-controls="stage" data-img="pitch"><span class="num">4</span><h3>Pitch, and learn from every reply</h3><p>We draft your pitches. You approve them. After each job, client feedback shapes your next offer.</p><span class="progress" aria-hidden="true"></span></button></li>
-        </ol>
-        <div class="step-stage" id="stage" role="tabpanel" aria-live="polite">
-          <img class="on" data-key="cv" src="/static/illustrations/cv.webp" width="1024" height="1024" alt="A resume turning into a neat profile card">
-          <img data-key="rate" src="/static/illustrations/rate.webp" width="1024" height="1024" alt="A balanced scale with coins and a briefcase in front of a dial" loading="lazy">
-          <img data-key="find" src="/static/illustrations/find.webp" width="1024" height="1024" alt="A magnifying glass over job cards, three highlighted" loading="lazy">
-          <img data-key="pitch" src="/static/illustrations/pitch.webp" width="1024" height="1024" alt="A paper plane looping around to a reply bubble" loading="lazy">
+        <div class="step-track">
+          <span class="track-line" aria-hidden="true"><span class="track-fill"></span></span>
+          <ol class="step-list">
+            <li class="step active" data-img="cv"><div class="step-card"><span class="num">1</span><h3>Upload your CV</h3><p>A PDF or Word file is enough. Answer a few questions about the work you want.</p><img class="step-img" src="/static/illustrations/cv.webp" width="1024" height="1024" alt="" loading="lazy"></div></li>
+            <li class="step" data-img="rate"><div class="step-card"><span class="num">2</span><h3>See your offer and rate</h3><p>What you could sell, to whom, and what people in your field charge. Based on official Dutch income figures and rate surveys.</p><img class="step-img" src="/static/illustrations/rate.webp" width="1024" height="1024" alt="" loading="lazy"></div></li>
+            <li class="step" data-img="find"><div class="step-card"><span class="num">3</span><h3>Find who might hire you</h3><p>Companies that fit your offer, freelance jobs on platforms, and other freelancers who share work.</p><img class="step-img" src="/static/illustrations/find.webp" width="1024" height="1024" alt="" loading="lazy"></div></li>
+            <li class="step" data-img="pitch"><div class="step-card"><span class="num">4</span><h3>Pitch, and learn from every reply</h3><p>We draft your pitches. You approve them. After each job, client feedback shapes your next offer.</p><img class="step-img" src="/static/illustrations/pitch.webp" width="1024" height="1024" alt="" loading="lazy"></div></li>
+          </ol>
+        </div>
+        <div class="stage-col">
+          <div class="step-stage" aria-hidden="true">
+            <img class="on" data-key="cv" src="/static/illustrations/cv.webp" width="1024" height="1024" alt="">
+            <img data-key="rate" src="/static/illustrations/rate.webp" width="1024" height="1024" alt="">
+            <img data-key="find" src="/static/illustrations/find.webp" width="1024" height="1024" alt="">
+            <img data-key="pitch" src="/static/illustrations/pitch.webp" width="1024" height="1024" alt="">
+          </div>
         </div>
       </div>
     </div>
@@ -406,31 +423,49 @@ footer a:hover { color: var(--ink); }
     items.forEach(function (el) { io.observe(el); });
   }
 
-  // How it works: auto-advancing steps with illustration crossfade
+  // How it works: the step crossing the middle of the screen becomes active as you scroll
   var root = document.querySelector('[data-steps]');
   if (!root) return;
-  var buttons = Array.prototype.slice.call(root.querySelectorAll('.step-btn'));
-  var images = root.querySelectorAll('.step-stage img');
-  var STEP_MS = 5500, current = 0, timer = null;
-  root.style.setProperty('--step-ms', STEP_MS + 'ms');
+  var track = root.querySelector('.step-track');
+  var line = root.querySelector('.track-line');
+  var fill = root.querySelector('.track-fill');
+  var steps = Array.prototype.slice.call(root.querySelectorAll('.step'));
+  var stageImgs = root.querySelectorAll('.step-stage img');
+  var current = 0;
 
-  function show(i) {
+  function numCenter(i) {
+    var n = steps[i].querySelector('.num').getBoundingClientRect();
+    return n.top - track.getBoundingClientRect().top + n.height / 2;
+  }
+  function layoutLine() {  // the line runs from the first number to the last
+    var top = numCenter(0);
+    line.style.top = top + 'px';
+    line.style.height = (numCenter(steps.length - 1) - top) + 'px';
+    fill.style.height = (numCenter(current) - top) + 'px';
+  }
+  function activate(i) {
     current = i;
-    buttons.forEach(function (b, j) {
-      b.setAttribute('aria-selected', j === i ? 'true' : 'false');
-      var bar = b.querySelector('.progress'); bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = '';
+    steps.forEach(function (s, j) { s.classList.toggle('active', j === i); });
+    stageImgs.forEach(function (img) { img.classList.toggle('on', img.dataset.key === steps[i].dataset.img); });
+    layoutLine();
+  }
+
+  // On every scroll (once per frame), the step nearest the middle of the screen is the active one.
+  // Measuring directly also handles jumps (anchor links, fast flicks) that a trigger line can miss.
+  function pick() {
+    var mid = window.innerHeight / 2, best = 0, bestDist = Infinity;
+    steps.forEach(function (s, i) {
+      var r = s.getBoundingClientRect();
+      var d = mid < r.top ? r.top - mid : (mid > r.bottom ? mid - r.bottom : 0);
+      if (d < bestDist) { bestDist = d; best = i; }
     });
-    images.forEach(function (img) { img.classList.toggle('on', img.dataset.key === buttons[i].dataset.img); });
+    if (best !== current) activate(best);
   }
-  function schedule() {
-    clearTimeout(timer);
-    if (!reduce && !root.classList.contains('paused')) timer = setTimeout(function () { show((current + 1) % buttons.length); schedule(); }, STEP_MS);
-  }
-  buttons.forEach(function (b, i) { b.addEventListener('click', function () { show(i); schedule(); }); });
-  root.addEventListener('mouseenter', function () { root.classList.add('paused'); clearTimeout(timer); });
-  root.addEventListener('mouseleave', function () { root.classList.remove('paused'); schedule(); });
-  root.addEventListener('focusin', function () { root.classList.add('paused'); clearTimeout(timer); });
-  show(0); schedule();
+  window.addEventListener('scroll', pick, { passive: true });  // cheap: four measurements
+  window.addEventListener('resize', function () { layoutLine(); pick(); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(layoutLine);
+  activate(0);
+  pick();
 })();
 </script>
 </body>
