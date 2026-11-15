@@ -1,0 +1,7 @@
+{
+  "_sample": true,
+  "profile": {"name": "Sam", "headline": "Backend + AI engineer · 5 yrs · Boston"},
+  "today": {"new_leads": 3, "drafts_pending": 2, "deadlines_this_week": 1, "replies_unread": 1},
+  "last_checkin_at": "2026-11-15T08:00:00Z",
+  "mode": "mock"
+}

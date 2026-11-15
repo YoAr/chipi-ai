@@ -1,0 +1,21 @@
+{
+  "_sample": true,
+  "fits": [
+    {"name": "Backend + AI integration contracts", "level": "high", "reason": "Recent LLM agent work plus 5 years of Python APIs", "sources": ["raw/2026-11-15-resume.pdf"]},
+    {"name": "Full-stack product builds", "level": "medium", "reason": "React experience, but not the user's stated preference", "sources": ["raw/2026-11-15-interview.md"]},
+    {"name": "Fixed-price web projects", "level": "low", "reason": "Usually priced below the floor", "sources": ["data/benchmarks.json"]}
+  ],
+  "rate": {
+    "floor": 100, "ask": 120, "low": 110, "high": 140, "currency": "USD", "unit": "hour",
+    "reasons": [
+      {"text": "Break-even against a ~$165K Boston salary is about $120–145/hour", "source": "data/benchmarks.json#salary_equivalent"},
+      {"text": "Boston agencies bill mid-level engineers $115–135/hour", "source": "data/benchmarks.json#hourly"},
+      {"text": "Arc.dev US freelancers list at $82–130/hour", "source": "data/benchmarks.json#hourly"}
+    ]
+  },
+  "goal_checks": [
+    {"name": "Each fit has a source", "passed": true},
+    {"name": "Rate inside benchmarks and above break-even", "passed": true},
+    {"name": "No contradiction with persona", "passed": true}
+  ]
+}

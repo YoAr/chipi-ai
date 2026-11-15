@@ -1,0 +1,18 @@
+{
+  "_about": "Freelance software engineer rate benchmarks, ~5 years experience, Boston / US. Collected 2026-11-15 from public sources; several are vendor estimates. Ranges in USD per hour unless noted.",
+  "hourly": [
+    {"source": "Upwork (US, experienced)", "low": 50, "high": 100, "kind": "marketplace", "confidence": "medium"},
+    {"source": "Freelancer.com (US average)", "low": 47, "high": 80, "kind": "marketplace", "confidence": "low"},
+    {"source": "Toptal (vendor estimate)", "low": 70, "high": 200, "kind": "vetted_network", "confidence": "low"},
+    {"source": "Arc.dev (US & Canada)", "low": 82, "high": 130, "kind": "vetted_network", "confidence": "medium"},
+    {"source": "US mid-level freelance, 3–6 yrs (vendor)", "low": 85, "high": 135, "kind": "survey", "confidence": "low"},
+    {"source": "Boston contract W-2 pay (job postings)", "low": 60, "high": 90, "kind": "contract_pay", "confidence": "medium"},
+    {"source": "Boston agency bill rate, mid-level (KORE1)", "low": 115, "high": 135, "median": 128, "kind": "bill_rate", "confidence": "medium"}
+  ],
+  "salary_equivalent": {
+    "boston_total_comp_5yrs": {"low": 145000, "high": 185000},
+    "billable_hours_per_year": {"low": 1400, "high": 1600},
+    "freelance_multiplier": {"low": 1.25, "high": 1.4},
+    "break_even_hourly": {"low": 120, "high": 145}
+  }
+}

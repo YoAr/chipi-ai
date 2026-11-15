@@ -1,0 +1,13 @@
+{
+  "_sample": true,
+  "name": "Sam",
+  "role": "Software engineer",
+  "years": 5,
+  "location": "Boston, MA",
+  "skills": ["Python", "FastAPI", "React", "LLM agents"],
+  "wants": "Backend and AI integration contracts",
+  "avoids": "CMS maintenance",
+  "hours_per_week": null,
+  "income_goal_monthly": null,
+  "sources": ["raw/2026-11-15-resume.pdf", "raw/2026-11-15-interview.md"]
+}

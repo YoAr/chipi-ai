@@ -1,0 +1,14 @@
+{
+  "_sample": true,
+  "columns": [
+    {"name": "Drafted", "items": [{"nickname": "data-pipeline", "note": "Waiting for approval"}]},
+    {"name": "Sent", "items": [{"nickname": "react-rebuild", "note": "No reply, 9 days"}]},
+    {"name": "Replied", "items": [{"nickname": "payments-api", "note": "Call booked Tuesday"}]},
+    {"name": "Active", "items": [{"nickname": "saas-agent", "note": "$120/hr · milestone 1 due Friday"}]},
+    {"name": "Done", "items": []}
+  ],
+  "deadlines": [
+    {"nickname": "saas-agent", "what": "Milestone 1", "due": "2026-11-21"},
+    {"nickname": "payments-api", "what": "Intro call", "due": "2026-11-18"}
+  ]
+}

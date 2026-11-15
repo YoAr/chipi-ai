@@ -1,0 +1,18 @@
+{
+  "_sample": true,
+  "week": "2026-W47",
+  "headline": [
+    {"name": "Booked income vs goal", "value": 0.42, "low": null, "high": null, "n": null, "direction": "up", "display": "42% of monthly goal"},
+    {"name": "User minutes this week", "value": 18, "low": null, "high": null, "n": null, "direction": "down", "display": "18 min"}
+  ],
+  "channels": [
+    {"name": "Direct email", "sent": 5, "replies": 3, "value": 0.57, "low": 0.25, "high": 0.84, "n": 5},
+    {"name": "HN Who's Hiring", "sent": 9, "replies": 4, "value": 0.45, "low": 0.20, "high": 0.71, "n": 9},
+    {"name": "Web search", "sent": 6, "replies": 2, "value": 0.38, "low": 0.12, "high": 0.68, "n": 6},
+    {"name": "RemoteOK", "sent": 8, "replies": 1, "value": 0.20, "low": 0.04, "high": 0.46, "n": 8}
+  ],
+  "guardrails": {"unapproved_sends": 0, "below_floor_quotes": 0, "unsourced_claims": 0, "duplicate_contacts": 0},
+  "learning": [
+    {"id": "L-001", "text": "Direct email and HN reply more than RemoteOK", "status": "proposed"}
+  ]
+}
