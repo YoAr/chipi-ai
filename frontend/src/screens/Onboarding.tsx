@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { api, useApi, useJob } from '../api'
 import type { Tab } from '../App'
 import { useIsReal } from '../mode'
+import { SampleCv } from '../SampleCv'
 import type { Persona } from '../types'
 import { Empty, JobStatus, Loading, Page } from '../ui'
 
@@ -49,6 +50,7 @@ export function Onboarding({ go }: { go: (t: Tab) => void }) {
         <input id="cv" className="sr-only" type="file" accept=".pdf,.docx,.txt,.md" disabled={build.running}
                onChange={(e) => upload(e.target.files?.[0])} />
       </label>
+      <SampleCv disabled={build.running} onUsed={async () => { persona.reload(); setStatus(null); if (real) await build.start() }} />
       {status && <p className="muted">{status}</p>}
       <JobStatus job={build.job} startError={build.startError} />
       {real && hasCv && !build.running && build.job?.status !== 'done' && (

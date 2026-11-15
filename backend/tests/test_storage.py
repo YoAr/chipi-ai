@@ -476,7 +476,7 @@ def test_update_persona_filters_fields_and_logs_event(store):
 
 def test_state_headline_from_persona(store):
     store.set_doc("persona", json.loads((FIXTURES / "persona.json").read_text()))
-    assert store.get("state")["profile"] == {"name": "Sam", "headline": "Software engineer · 5 yrs · Boston, MA"}
+    assert store.get("state")["profile"] == {"name": "Sam Verhoeven", "headline": "Project manager · 10 yrs · Amsterdam, Netherlands"}
 
 
 def test_add_cv_saves_raw_and_appends_source(store):

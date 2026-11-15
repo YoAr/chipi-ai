@@ -101,7 +101,8 @@ def test_persona_update_accepts_known_fields(client):
 )
 def test_persona_update_rejects_bad_types_and_unknown_fields(client, bad):
     assert client.put("/api/persona", json=bad).status_code == 422
-    assert client.get("/api/persona").json()["skills"] == ["Python", "FastAPI", "React", "LLM agents"]
+    fixture_skills = json.loads((REPO_ROOT / "fixtures" / "persona.json").read_text())["skills"]
+    assert client.get("/api/persona").json()["skills"] == fixture_skills
 
 
 def test_approve_sends_with_the_edited_text(client):
@@ -136,6 +137,18 @@ def test_chat_streams_contract_events_and_ends_with_done(client):
 
 def test_chat_rejects_empty_messages(client):
     assert client.post("/api/chat", json={"messages": []}).status_code == 422
+
+
+def test_sample_cv_is_served_and_can_be_used(client):
+    doc = client.get("/api/sample-cv").json()
+    assert doc["filename"] == "sample-cv-sam.md"
+    assert doc["markdown"].startswith("# Sam Verhoeven")
+    assert "fictional" in doc["markdown"]
+    pdf = client.get("/api/sample-cv/pdf")
+    assert pdf.status_code == 200 and pdf.headers["content-type"] == "application/pdf"
+    assert pdf.content.startswith(b"%PDF")
+    persona = client.post("/api/sample-cv/use").json()
+    assert any(s.endswith("sample-cv-sam.md") for s in persona["sources"])
 
 
 def test_cv_upload_adds_a_source(client):

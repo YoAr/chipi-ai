@@ -25,7 +25,8 @@ function inline(text: string, key: string): ReactNode[] {
 
 type List = { ordered: boolean; items: string[] }
 
-export function Markdown({ text }: { text: string }) {
+/** `rich` also renders headings (#, ##, ###) and "> " notes, for documents like a CV. */
+export function Markdown({ text, rich = false }: { text: string; rich?: boolean }) {
   const blocks: ReactNode[] = []
   let para: string[] = []
   let list: List | null = null
@@ -49,7 +50,22 @@ export function Markdown({ text }: { text: string }) {
     const bullet = /^\s*[-*•]\s+(.*)$/.exec(line)
     const numbered = /^\s*\d+[.)]\s+(.*)$/.exec(line)
     const item = bullet ?? numbered
-    if (item) {
+    const heading = rich ? /^(#{1,3})\s+(.*)$/.exec(line) : null
+    const note = rich ? /^>\s?(.*)$/.exec(line) : null
+    if (heading || note) {
+      flushPara()
+      flushList()
+      const k = `h${blocks.length}`
+      if (heading) {
+        const level = heading[1].length
+        const content = inline(heading[2], k)
+        blocks.push(level === 1 ? <h2 key={k} className="md-h1">{content}</h2>
+          : level === 2 ? <h3 key={k} className="md-h2">{content}</h3>
+          : <h4 key={k} className="md-h3">{content}</h4>)
+      } else {
+        blocks.push(<p key={k} className="md-note">{inline(note![1], k)}</p>)
+      }
+    } else if (item) {
       flushPara()
       const ordered = numbered !== null && bullet === null
       if (!list || list.ordered !== ordered) {
@@ -63,6 +79,7 @@ export function Markdown({ text }: { text: string }) {
     } else {
       flushList()
       para.push(line.replace(/^#{1,6}\s+/, ''))
+      if (rich) flushPara() // documents keep their line breaks (e.g. a CV's title and contact lines)
     }
   }
   flushPara()

@@ -25,9 +25,11 @@ from .ai.client import AIUnavailable
 from .cv import extract_text
 from .routes import drafts as draft_routes
 from .routes import profile as profile_routes
+from .routes import sample_cv as sample_cv_routes
 from .routes import search as search_routes
 from .guards import GuardError, RateLimiter, require_token
 from .mcp_server import create_mcp, mount_mcp
+from .passcode import install as install_passcode
 from .metrics import compute_metrics
 from .mock_store import MockStore, NotFound
 from .openai_check import STATUS as OPENAI_STATUS
@@ -139,7 +141,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(profile_routes.router)
     app.include_router(search_routes.router)
     app.include_router(draft_routes.router)
-    app.add_middleware(
+    app.include_router(sample_cv_routes.router)
+    install_passcode(app, settings)  # no-op unless DEMO_PASSCODE is set (public deploy)
+    app.add_middleware(  # added last so it runs first: CORS headers on every reply, 401s included
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
         allow_methods=["*"],

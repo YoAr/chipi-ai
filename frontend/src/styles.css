@@ -172,6 +172,22 @@ textarea { width: 100%; padding: 12px 14px; resize: vertical; line-height: 1.6; 
 .msg-md li + li { margin-top: 4px; }
 .msg-md strong { color: var(--ink); font-weight: 600; }
 .msg-md code { font-family: ui-monospace, Menlo, monospace; font-size: .92em; background: var(--surface); border-radius: 4px; padding: 0 4px; }
+
+/* Sample CV on the profile screen (SampleCv.tsx) */
+.sample-cv { display: flex; flex-direction: column; gap: 12px; }
+.sample-cv-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; background: var(--mint); border-radius: var(--r-inner); padding: 12px 16px; color: var(--ink); }
+.sample-cv-row > span { flex: 1 1 320px; min-width: 0; }
+.sample-cv-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.cv-doc { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 28px 32px; max-width: 760px; line-height: 1.55; }
+.cv-doc > * { margin: 0; }
+.cv-doc > * + * { margin-top: 10px; }
+.cv-doc .md-h1 { font-size: 28px; }
+.cv-doc .md-h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin-top: 24px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.cv-doc .md-h3 { font-size: 17px; margin-top: 18px; }
+.cv-doc .md-note { background: var(--cream); color: var(--amber-ink); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+.cv-doc ul { padding-left: 20px; }
+.cv-doc li + li { margin-top: 4px; }
+.cv-doc strong { color: var(--ink); }
 .chat-form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
 .chat-form input { flex: 1; }
 
@@ -186,3 +202,8 @@ textarea { width: 100%; padding: 12px 14px; resize: vertical; line-height: 1.6; 
 .empty { align-items: flex-start; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; align-self: center; }
 .link-btn { font: inherit; color: var(--accent); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; }
+
+/* Demo passcode dialog (public deploy only) */
+.dialog-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(19, 32, 28, 0.45); display: grid; place-items: center; padding: 16px; }
+.dialog { width: min(420px, 100%); box-shadow: 0 24px 60px -20px rgba(19, 32, 28, 0.45); }
+.dialog input { width: 100%; }
