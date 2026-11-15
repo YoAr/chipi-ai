@@ -7,7 +7,8 @@ primary_region = "iad"
   dockerfile = "Dockerfile"
 
 [env]
-  MOCK_MODE = "1"
+  # 0 = real data on the /data volume (live since 2026-11-15); 1 = sample data from fixtures/
+  MOCK_MODE = "0"
   CORS_ORIGINS = "https://chipi-ai.fly.dev"
   DATA_DIR = "/data"
   # The OpenAI project uses US data residency: calls must go to the US host.
