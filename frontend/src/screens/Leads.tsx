@@ -4,6 +4,7 @@ import type { Tab } from '../App'
 import { useIsReal } from '../mode'
 import type { Lead } from '../types'
 import { Empty, JobStatus, Loading, Page, sourceLabel } from '../ui'
+import { LeadsV2 } from './LeadsV2'
 
 const VERDICTS = [
   ['useful', 'Useful'],
@@ -53,6 +54,10 @@ function LeadRow({ lead, real, onVerdict, go }: { lead: Lead; real: boolean; onV
 
 export function Leads({ go }: { go: (t: Tab) => void }) {
   const real = useIsReal()
+  return real ? <LeadsV2 go={go} /> : <SampleLeads go={go} real={real} />
+}
+
+function SampleLeads({ go, real }: { go: (t: Tab) => void; real: boolean }) {
   const { data, error, reload } = useApi<{ leads: Lead[] }>('/api/leads')
   const search = useJob('/api/search', '/api/search/status', () => reload(), real)
   const [url, setUrl] = useState('')

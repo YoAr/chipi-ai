@@ -324,6 +324,8 @@ class RealStore:
             lead.update({k: row[k] for k in POSTING_FIELDS})
             lead["remote"] = None if row["remote"] is None else bool(row["remote"])
             lead["skills"] = json.loads(row["skills_json"]) if row["skills_json"] else []
+            if row["research_error"]:
+                lead["research_error"] = row["research_error"]
         if row["verdict_note"]:
             lead["verdict_note"] = row["verdict_note"]
         return lead
@@ -341,8 +343,56 @@ class RealStore:
         if status:
             sql += " WHERE status = ?"
             args = (status,)
-        sql += " ORDER BY score IS NOT NULL, score DESC, found_at DESC, id"
-        return {"leads": [self._lead_out(r) for r in self.conn.execute(sql, args).fetchall()]}
+        sql += " ORDER BY score IS NOT NULL, score DESC, published_at DESC, found_at DESC, id"
+        leads = [self._lead_out(r) for r in self.conn.execute(sql, args).fetchall()]
+        briefs = {r["lead_id"]: json.loads(r["json"]) for r in self.conn.execute("SELECT lead_id, json FROM briefs")}
+        for lead in leads:
+            if lead["id"] in briefs:
+                lead["brief"] = briefs[lead["id"]]
+        return {"leads": leads}
+
+    # Researcher (spec v2 §5.3) -----------------------------------------------
+    def lead(self, lead_id: str) -> dict:
+        lead = self._lead_out(self._lead_row(lead_id))
+        row = self.conn.execute("SELECT json FROM briefs WHERE lead_id = ?", (lead_id,)).fetchone()
+        if row:
+            lead["brief"] = json.loads(row["json"])
+        return lead
+
+    def leads_to_research(self, limit: int, services: list[dict] | None = None) -> list[dict]:
+        """The "filtered" leads most relevant to the approved services (app/relevance.py), saving each
+        lead's relevance as its score. Leads whose research failed before go last."""
+        from ..relevance import rank  # lazy: keeps storage free of product logic imports at load
+
+        rows = self.conn.execute("SELECT * FROM leads WHERE status = 'filtered'").fetchall()
+        leads = [self._lead_out(r) | {"_failed": bool(r["research_error"])} for r in rows]
+        ranked = rank(leads, services or []) if services else [(l, l.get("score") or 0, None) for l in leads]
+        with db.WRITE_LOCK, self.conn:
+            self.conn.executemany("UPDATE leads SET score = ? WHERE id = ?", [(sc, l["id"]) for l, sc, _ in ranked])
+        ranked.sort(key=lambda x: x[0]["_failed"])  # stable: keeps relevance order within each group
+        out = []
+        for lead, sc, _ in ranked[: int(limit)]:
+            lead.pop("_failed", None)
+            out.append({**lead, "score": sc})
+        return out
+
+    def save_brief(self, lead_id: str, brief: dict, status: str) -> dict:
+        if status not in ("researched", "dropped"):
+            raise ValueError(f"Bad research status {status!r}")
+        with db.WRITE_LOCK, self.conn:
+            row = self._lead_row(lead_id)
+            self.conn.execute("INSERT OR REPLACE INTO briefs (lead_id, json, created_at) VALUES (?, ?, ?)",
+                              (lead_id, json.dumps(brief, ensure_ascii=False), _now()))
+            self.conn.execute("UPDATE leads SET status = ?, why = ?, research_error = NULL WHERE id = ?",
+                              (status, brief.get("fit_reason") or row["why"], lead_id))
+        self._event("lead_researched" if status == "researched" else "lead_dropped", "agent", f"lead:{row['nickname']}",
+                    {"lead_id": lead_id, "service_id": brief.get("service_id"), "channel": brief.get("channel"),
+                     "hook_type": (brief.get("hook") or {}).get("type"), "reason": brief.get("fit_reason")})
+        return self.lead(lead_id)
+
+    def save_research_error(self, lead_id: str, error: str, cost: dict) -> None:
+        with db.WRITE_LOCK, self.conn:
+            self.conn.execute("UPDATE leads SET research_error = ? WHERE id = ?", (error[:500], lead_id))
 
     def set_verdict(self, lead_id: str, verdict: str, note: str | None) -> dict:
         if verdict not in VERDICTS:

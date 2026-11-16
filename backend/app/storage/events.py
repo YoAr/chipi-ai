@@ -28,7 +28,7 @@ WORLD_TYPES = (
     "milestone_due", "invoice_paid",
 )
 AGENT_TYPES = (
-    "lead_found", "draft_created", "verifier_failed", "lesson_added", "lesson_applied",
+    "lead_found", "lead_researched", "lead_dropped", "draft_created", "verifier_failed", "lesson_added", "lesson_applied",
     "run_completed", "run_failed",
 )
 EVENT_TYPES = frozenset(USER_TYPES + WORLD_TYPES + AGENT_TYPES)

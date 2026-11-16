@@ -242,3 +242,7 @@ textarea { width: 100%; padding: 12px 14px; resize: vertical; line-height: 1.6; 
 .demand-label { display: flex; justify-content: space-between; font-size: var(--fs-small); }
 .meter { height: 8px; border-radius: var(--r-pill); background: var(--line); overflow: hidden; }
 .meter span { display: block; height: 100%; background: var(--accent); border-radius: var(--r-pill); }
+
+/* Spec v2: lead briefs */
+.lead .brief { display: flex; flex-direction: column; gap: 6px; background: var(--bg); border-radius: var(--r-inner); padding: 12px 14px; }
+.lead .brief p { margin: 0; }

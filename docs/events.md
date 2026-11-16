@@ -26,7 +26,7 @@ It is the raw truth that lessons and metrics are computed from.
 **From the world:** `reply_received` · `no_reply_timeout` · `call_booked` ·
 `contract_won` · `contract_lost` · `milestone_due` · `invoice_paid`
 
-**From agents:** `lead_found` · `draft_created` · `verifier_failed` ·
+**From agents:** `lead_found` · `lead_researched` · `lead_dropped` · `draft_created` · `verifier_failed` ·
 `lesson_added` · `lesson_applied` · `run_completed` · `run_failed`
 
 ## What each event triggers

@@ -171,3 +171,29 @@ ServicesVersion = ProfileVersion with data: {services: Service[], market: <deman
 Approving hands the services' NL and EN discovery terms to Scout (`POST /api/scout` default) and
 appends a `services_approved` event. The Offers tab is labelled "Services"; in sample-data mode
 it still shows `/api/offers`.
+
+## Proposed: spec v2 Researcher (pending partner OK)
+
+Real mode only. Needs an approved profile and approved services.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/api/research` | `{limit?: 1-25 (default 10), lead_ids?: string[]}` | 202 `Job` |
+| GET | `/api/research/status` | — | `Job` (`result`: researched / dropped / failed counts, searches, scrapes) |
+| GET | `/api/leads/{id}` | — | `Lead` with `brief` |
+
+Without `lead_ids`, the "filtered" leads most relevant to the approved services go first
+(app/relevance.py; the relevance is saved as the lead's `score`). Researched leads move to
+`researched`, non-fits to `dropped` (with `why` = the reason); failures stay `filtered` with
+`research_error`. `GET /api/leads` includes `brief` on leads that have one.
+
+```
+Brief { fit, fit_reason, service_id|null,
+        hook: {summary, source_url, published_at, type: news|blog|launch|funding|leadership|partnership|posting|other,
+               raw?: "raw/…" } | null,
+        problem_hypothesis, channel: warm_intro|apply_interim|direct_note, warm_connection|null,
+        draft_language: nl|en, sources: [{url, title, published_at}],
+        provenance: {model, prompt_version, input_ref, ts, cost} }
+```
+
+`/mcp`: `research_leads(limit)`; poll `get_job("research")`.

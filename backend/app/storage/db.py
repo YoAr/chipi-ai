@@ -134,6 +134,13 @@ CREATE TABLE IF NOT EXISTS posting_snapshots (
 );
 CREATE INDEX IF NOT EXISTS posting_snapshots_day ON posting_snapshots(day);
 
+-- Spec v2: Researcher briefs, one current brief per lead (spec §5.3)
+CREATE TABLE IF NOT EXISTS briefs (
+    lead_id    TEXT PRIMARY KEY,
+    json       TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 -- Spec v2: versioned documents with approval state (profile, services); see versions.py
 CREATE TABLE IF NOT EXISTS doc_versions (
     name        TEXT NOT NULL,          -- profile | services
@@ -164,6 +171,7 @@ MIGRATIONS = {
         ("description", "TEXT"),
         ("apply_url", "TEXT"),
         ("skills_json", "TEXT"),
+        ("research_error", "TEXT"),      # last Researcher failure, if any
     ],
 }
 POST_MIGRATION_SQL = (

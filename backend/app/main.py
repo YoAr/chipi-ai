@@ -35,10 +35,12 @@ from .mock_store import MockStore, NotFound
 from .openai_check import STATUS as OPENAI_STATUS
 from .rates import refresh_benchmarks
 from . import jobs, scout
+from .ai import researcher
 from .providers.search import ProviderUnavailable
 from .routes import scout as scout_routes
 from .routes import interview as interview_routes
 from .routes import services as services_routes
+from .routes import research as research_routes
 import threading
 from .openai_check import check_models
 from .simulate import simulate
@@ -94,8 +96,11 @@ class _QueueAdapter:
     def start_snapshot(self) -> dict:
         return self.start_job(scout.SNAPSHOT_JOB, scout.run_snapshot)
 
+    def start_research(self, limit: int) -> dict:
+        return self.start_job(researcher.JOB, researcher.run_research, limit)
+
     def job_status(self, key: str) -> dict:
-        if key not in (scout.JOB, scout.SNAPSHOT_JOB):
+        if key not in (scout.JOB, scout.SNAPSHOT_JOB, researcher.JOB):
             raise NotFound(f"Unknown job {key}")
         return jobs.get(self.store, key) if isinstance(self.store, RealStore) else jobs._idle()
 
@@ -178,6 +183,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(scout_routes.router)
     app.include_router(interview_routes.router)
     app.include_router(services_routes.router)
+    app.include_router(research_routes.router)
     install_passcode(app, settings)  # no-op unless DEMO_PASSCODE is set (public deploy)
     app.add_middleware(  # added last so it runs first: CORS headers on every reply, 401s included
         CORSMiddleware,

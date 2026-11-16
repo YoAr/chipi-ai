@@ -74,8 +74,15 @@ def create_mcp(store_provider: StoreProvider) -> MCPServer:
         return store_provider().start_snapshot()
 
     @mcp.tool()
+    def research_leads(limit: int = 10) -> dict:
+        """Start the Researcher on the newest Scout leads (status "filtered"): for each, find a recent
+        dated company hook, pick the matching approved service and channel, or drop it with a reason.
+        Returns the job; poll get_job("research")."""
+        return store_provider().start_research(max(1, min(int(limit), 25)))
+
+    @mcp.tool()
     def get_job(key: str) -> dict:
-        """Status of a background job started from here: "scout" or "panel_snapshot"."""
+        """Status of a background job started from here: "scout", "panel_snapshot" or "research"."""
         return store_provider().job_status(key)
 
     return mcp

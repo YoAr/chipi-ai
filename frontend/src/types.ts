@@ -63,6 +63,26 @@ export type Lead = {
   status: string
   found_at: string
   verdict_note?: string
+  // Spec v2 (Scout + Researcher), real mode only
+  location?: string | null
+  remote?: boolean | null
+  language?: 'nl' | 'en' | null
+  published_at?: string | null
+  skills?: string[]
+  research_error?: string
+  brief?: LeadBrief
+}
+
+export type LeadBrief = {
+  fit: boolean
+  fit_reason: string
+  service_id: string | null
+  hook: { summary: string; source_url: string; published_at: string; type: string; raw?: string } | null
+  problem_hypothesis: string
+  channel: 'warm_intro' | 'apply_interim' | 'direct_note'
+  warm_connection: string | null
+  draft_language: 'nl' | 'en'
+  sources: { url: string; title: string; published_at: string | null }[]
 }
 
 export type Draft = {
