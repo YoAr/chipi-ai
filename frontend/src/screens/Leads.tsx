@@ -31,7 +31,9 @@ function LeadRow({ lead, real, onVerdict, go }: { lead: Lead; real: boolean; onV
           {sourceLabel(lead.source)} · {lead.rate_text ?? 'rate unknown'}
           {!lead.fetched && ' · not fetched yet'}
         </p>
-        {lead.why && <p className="small">Why: {lead.why}</p>}
+        {lead.why && (lead.score == null
+          ? <p className="small muted">{lead.why}</p>
+          : <p className="small">Why: {lead.why}</p>)}
         <JobStatus job={draft.job} startError={draft.startError} />
       </div>
       <div className="row-actions">

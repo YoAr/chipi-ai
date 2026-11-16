@@ -11,11 +11,15 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .guards import check_send_allowed
+
 FIXTURE_NAMES = ("state", "persona", "fit", "offers", "leads", "drafts", "pipeline", "metrics")
 PERSONA_FIELDS = {
     "name", "role", "years", "location", "skills", "wants", "avoids",
     "hours_per_week", "income_goal_monthly",
 }
+# How far along a lead is; matches the pipeline columns (Drafted, Sent, Replied, Active, Done).
+LEAD_STAGE = {"drafted": 0, "sent": 1, "replied": 2, "won": 3, "lost": 4}
 
 
 class NotFound(Exception):
@@ -107,10 +111,13 @@ class MockStore:
         raise NotFound(f"No draft with id {draft_id}")
 
     def approve_draft(self, draft_id: str, final_text: str) -> dict:
+        """Approve only, as in real mode: the user then copies it, sends it and marks it sent."""
         draft = self._draft(draft_id)
+        if draft["status"] != "pending":
+            raise ValueError(f"Draft {draft_id} is {draft['status']}; only a pending draft can be approved")
         draft["body"] = final_text
-        draft["status"] = "sent"  # mock mode: approving sends immediately, nothing leaves the server
-        draft["approved_at"] = draft["sent_at"] = _now()
+        draft["status"] = "approved"
+        draft["approved_at"] = _now()
         return copy.deepcopy(draft)
 
     def reject_draft(self, draft_id: str, note: str) -> dict:
@@ -118,3 +125,68 @@ class MockStore:
         draft["status"] = "rejected"
         draft["reject_note"] = note
         return copy.deepcopy(draft)
+
+    # After approval: sent, replied, won (same rules as RealStore; nothing is logged) --------
+    def _find_on_board(self, nickname: str) -> tuple[int | None, dict | None]:
+        for i, col in enumerate(self._data["pipeline"]["columns"]):
+            for item in col["items"]:
+                if item["nickname"] == nickname:
+                    return i, item
+        return None, None
+
+    def _advance(self, nickname: str, title: str, column: str, note: str) -> None:
+        """Move a lead's card forward to `column` (never backwards), or add it there."""
+        cols = self._data["pipeline"]["columns"]
+        target = next(i for i, c in enumerate(cols) if c["name"] == column)
+        at, item = self._find_on_board(nickname)
+        if at is not None and at >= target:
+            return
+        if item is not None:
+            cols[at]["items"].remove(item)
+        cols[target]["items"].insert(0, {"nickname": nickname, "title": title or nickname, "note": note})
+
+    def _stage(self, lead: dict) -> int:
+        at, _ = self._find_on_board(lead["nickname"])
+        return max(LEAD_STAGE.get(lead["status"], 0), at if at is not None else 0)
+
+    def mark_sent(self, draft_id: str) -> dict:
+        draft = self._draft(draft_id)
+        if draft["status"] == "sent":
+            return copy.deepcopy(draft)
+        check_send_allowed(draft)  # product rule 1: nothing goes out unapproved
+        draft["status"] = "sent"
+        draft["sent_at"] = _now()
+        try:
+            lead = self._lead(draft["lead_id"])
+        except NotFound:
+            lead = None
+        if lead is not None:
+            if LEAD_STAGE.get(lead["status"], 0) < LEAD_STAGE["sent"]:
+                lead["status"] = "sent"
+            self._advance(lead["nickname"], lead["title"], "Sent", "No reply yet")
+        return copy.deepcopy(draft)
+
+    def _require_sent(self, lead: dict) -> None:
+        if self._stage(lead) < LEAD_STAGE["sent"]:
+            raise ValueError("Nothing has been sent to this lead yet; mark the message sent first")
+
+    def mark_replied(self, lead_id: str, note: str | None = None) -> dict:
+        lead = self._lead(lead_id)
+        if self._stage(lead) >= LEAD_STAGE["replied"]:
+            return copy.deepcopy(lead)
+        self._require_sent(lead)
+        lead["status"] = "replied"
+        self._advance(lead["nickname"], lead["title"], "Replied", "Reply received")
+        return copy.deepcopy(lead)
+
+    def mark_won(self, lead_id: str, amount: float | None = None, note: str | None = None) -> dict:
+        if amount is not None and amount < 0:
+            raise ValueError("amount can't be negative")
+        lead = self._lead(lead_id)
+        if self._stage(lead) >= LEAD_STAGE["won"]:
+            return copy.deepcopy(lead)
+        self._require_sent(lead)
+        lead["status"] = "won"
+        self._advance(lead["nickname"], lead["title"], "Active", lead.get("rate_text") or "Won")
+        return copy.deepcopy(lead)
+

@@ -31,6 +31,8 @@ class Settings:
     # Tracker: business days after "sent" before "Did they reply?" (spec v2 §6.3)
     reminder_business_days: int = 5
 
+    email_allowlist: tuple[str, ...] = ()
+
 
 def load_settings() -> Settings:
     return Settings(
@@ -51,4 +53,6 @@ def load_settings() -> Settings:
         demo_passcode=os.getenv("DEMO_PASSCODE", "").strip(),
         oxylabs_key=os.getenv("OXYLABS_WEB_API_KEY", "").strip(),
         reminder_business_days=int(os.getenv("REMINDER_BUSINESS_DAYS", "5")),
+
+        email_allowlist=tuple(a.strip() for a in os.getenv("EMAIL_ALLOWLIST", "").split(",") if a.strip()),
     )

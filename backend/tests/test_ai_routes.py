@@ -31,12 +31,15 @@ ACTIONS = [
 ]
 
 
-@pytest.mark.parametrize("start, status", [a for a in ACTIONS if "draft" not in a[0]])  # drafts are built (spec v2)
-def test_unbuilt_pieces_fail_with_a_readable_error(client, start, status):
-    assert client.post(start).status_code == 202
-    job = client.get(status).json()  # TestClient runs background tasks before returning
-    assert job["status"] == "error"
-    assert job["error"].startswith("Not built yet")
+def test_an_unbuilt_piece_fails_with_a_readable_error(client, monkeypatch):
+    # All three pieces are built now; the "Not built yet" mapping stays for any new stub.
+    def unbuilt(store, s):
+        raise NotImplementedError("build_fit (app/ai/profile.py)")
+
+    monkeypatch.setattr(profile, "run_profile", unbuilt)
+    assert client.post("/api/profile/build").status_code == 202
+    job = client.get("/api/profile/status").json()
+    assert job["status"] == "error" and job["error"].startswith("Not built yet")
 
 
 @pytest.mark.parametrize("start, status", ACTIONS)

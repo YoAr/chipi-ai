@@ -103,10 +103,13 @@ export type Draft = {
   final_text?: string
   copied_at?: string
   kind?: 'initial' | 'followup'
+  approved_at?: string
+  sent_at?: string
+  reject_note?: string
 }
 
 export type Pipeline = {
-  columns: { name: string; items: { nickname: string; note: string }[] }[]
+  columns: { name: string; items: { nickname: string; title?: string; note: string }[] }[]
   deadlines: { nickname: string; what: string; due: string }[]
 }
 

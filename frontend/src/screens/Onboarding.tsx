@@ -47,7 +47,7 @@ export function Onboarding({ go }: { go: (t: Tab) => void }) {
       <label className="dropzone" htmlFor="cv">
         <b>{hasCv ? 'Upload a newer CV' : 'Upload your CV'}</b>
         <span className="muted">PDF or Word. It stays private to you.</span>
-        <span className="btn btn-primary">Choose a file</span>
+        <span className={hasCv ? 'btn' : 'btn btn-primary'}>Choose a file</span>
         <input id="cv" className="sr-only" type="file" accept=".pdf,.docx,.txt,.md" disabled={build.running}
                onChange={(e) => upload(e.target.files?.[0])} />
       </label>

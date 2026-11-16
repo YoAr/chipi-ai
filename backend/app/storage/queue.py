@@ -81,6 +81,25 @@ def complete(conn: sqlite3.Connection, id: int, ok: bool, error: str | None = No
     return _row(updated[0])
 
 
+def finish_for_ref_unlocked(conn: sqlite3.Connection, kind: str, ref: str) -> int | None:
+    """Mark the open (pending or taken) items of this kind for `ref` done, inside the caller's
+    transaction (caller holds WRITE_LOCK and commits). Returns the first such item's id, else
+    the id of an item already done for it, else None."""
+    rows = conn.execute(
+        "SELECT id, status FROM queue WHERE kind = ? AND ref = ? ORDER BY id", (kind, ref)
+    ).fetchall()
+    open_ids = [r["id"] for r in rows if r["status"] in ("pending", "taken")]
+    if open_ids:
+        marks = ",".join("?" * len(open_ids))
+        conn.execute(
+            f"UPDATE queue SET status = 'done', done_at = ?, error = NULL WHERE id IN ({marks})",
+            (_now(), *open_ids),
+        )
+        return int(open_ids[0])
+    done = [r["id"] for r in rows if r["status"] == "done"]
+    return int(done[0]) if done else None
+
+
 def pending(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM queue WHERE status = 'pending' "

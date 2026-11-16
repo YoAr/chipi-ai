@@ -72,3 +72,17 @@ def test_rate_limiter():
     assert rl.check("b")
     t[0] = 10.0
     assert rl.check("a")
+
+
+
+def test_money_amounts_reads_euros_and_flags_other_currencies():
+    from app.guards import fmt_eur, money_amounts, parse_amount
+
+    assert money_amounts("€120/hour") == [("EUR", 120.0)]
+    assert money_amounts("EUR 120 per hour, or 120 euro") == [("EUR", 120.0), ("EUR", 120.0)]
+    assert money_amounts("€6.000 fixed (≈ €125/hour)") == [("EUR", 6000.0), ("EUR", 125.0)]
+    assert money_amounts("$95/hour and £80") == [("USD", 95.0), ("GBP", 80.0)]
+    assert money_amounts("€120k") == [("EUR", 120000.0)]
+    assert money_amounts("5 years, a 20-minute call") == []
+    assert parse_amount("97,50") == 97.5 and parse_amount("1,200.50") == 1200.5 and parse_amount("1.200") == 1200
+    assert fmt_eur(100.0) == "€100" and fmt_eur(97.5) == "€97.5"

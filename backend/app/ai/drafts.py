@@ -22,7 +22,8 @@ from ..compliance import DISCLAIMER
 from ..config import Settings
 from ..providers.fetcher import PageFetcher
 from . import client as ai
-from . import prechecks
+from . import legacy_drafts, prechecks
+from .legacy_drafts import DraftReview, DraftText, code_checks, model_check, write_draft
 
 MAX_REVISIONS = 2
 WRITER_PROMPT_VERSION = "writer-v1"
@@ -271,6 +272,8 @@ def guidance(draft: dict, brief: dict) -> list[str]:
 
 def run_draft(store, settings: Settings, lead_id: str, language: str | None = None, kind: str = "initial") -> None:
     lead = store.lead(lead_id)
+    if lead.get("source") != "recruitee" and not lead.get("brief") and kind == "initial" and not language:
+        return legacy_drafts.run_draft(store, settings, lead_id)
     draft = write_and_verify(store, settings, lead, language, kind=kind, job=job_key(lead_id))
     msg = ("Draft ready to copy" if draft["status"] == "ready"
            else "Draft needs your review: it didn't pass every check in 3 rounds")
