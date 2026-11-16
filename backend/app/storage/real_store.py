@@ -20,7 +20,14 @@ from ..mock_store import PERSONA_FIELDS, NotFound
 from . import db, events, queue, seed, wiki
 
 DOC_NAMES = ("persona", "fit", "offers", "metrics")
-LEAD_STATUSES = ("new", "useful", "maybe", "skip", "drafted", "sent", "replied", "won", "lost")
+LEGACY_LEAD_STATUSES = ("new", "useful", "maybe", "skip", "drafted", "sent", "replied", "won", "lost")
+# Spec v2 §6.3 Tracker
+TRACKER_STATUSES = ("discovered", "filtered", "researched", "dropped", "drafted", "verified", "ready",
+                    "copied", "sent", "positive_reply", "not_interested", "no_reply", "meeting", "won", "lost")
+LEAD_STATUSES = tuple(dict.fromkeys(LEGACY_LEAD_STATUSES + TRACKER_STATUSES))
+# Spec v2 posting fields (columns added by db.MIGRATIONS); null on older leads
+POSTING_FIELDS = ("source_posting_id", "company_slug", "department", "location", "remote", "employment_type",
+                  "language", "published_at", "description", "apply_url")
 VERDICTS = ("useful", "maybe", "skip")
 DRAFT_STATUSES = ("pending", "approved", "sent", "rejected")
 CHANNELS = ("email", "apply_link")
@@ -316,6 +323,10 @@ class RealStore:
     def _lead_out(row: sqlite3.Row) -> dict:
         lead = {k: row[k] for k in LEAD_FIELDS}
         lead["fetched"] = bool(lead["fetched"])
+        if row["source_posting_id"]:
+            lead.update({k: row[k] for k in POSTING_FIELDS})
+            lead["remote"] = None if row["remote"] is None else bool(row["remote"])
+            lead["skills"] = json.loads(row["skills_json"]) if row["skills_json"] else []
         if row["verdict_note"]:
             lead["verdict_note"] = row["verdict_note"]
         return lead
@@ -397,6 +408,10 @@ class RealStore:
                         key = f"{_slug(item.get('company') or '')}|{_slug(item.get('title') or '', 120)}"
                 if self.conn.execute("SELECT 1 FROM leads WHERE dedup_key = ?", (key,)).fetchone():
                     continue
+                posting_id = item.get("source_posting_id")
+                if posting_id and self.conn.execute(
+                        "SELECT 1 FROM leads WHERE source_posting_id = ?", (posting_id,)).fetchone():
+                    continue
                 status = item.get("status") or "new"
                 if status not in LEAD_STATUSES:
                     raise ValueError(f"Unknown lead status {status!r}")
@@ -417,6 +432,13 @@ class RealStore:
                         item.get("why"), status, item.get("found_at") or _now(), key, item.get("verdict_note"),
                     ),
                 )
+                if posting_id:
+                    remote = item.get("remote")
+                    values = [item.get(k) for k in POSTING_FIELDS]
+                    values[POSTING_FIELDS.index("remote")] = None if remote is None else int(bool(remote))
+                    sets = ", ".join(f"{k} = ?" for k in POSTING_FIELDS)
+                    self.conn.execute(f"UPDATE leads SET {sets}, skills_json = ? WHERE id = ?",
+                                      (*values, json.dumps(item.get("skills") or []), lead_id))
                 inserted_ids.append(lead_id)
         out = [self._lead_out(self._lead_row(i)) for i in inserted_ids]
         for lead in out:

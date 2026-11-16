@@ -96,3 +96,25 @@ Job { status: "idle" | "running" | "done" | "error",
   plus a fresh-context model check), and adds it to `/api/drafts?status=pending` with its
   `verifier.checks`.
 - `GET /api/state` → `mode` is `"real"` or `"mock"`; the UI hides AI buttons in `"mock"`.
+
+## Proposed: spec v2 Scout (pending partner OK; see docs/plan-agents-v2.md)
+
+Real mode only (409 with sample data). 202 + poll, same `Job` shape as the AI actions.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/api/scout` | `{terms?: string[]}` (≤ 10; default: approved services' discovery terms, else profile skills) | 202 `Job` |
+| GET | `/api/scout/status` | — | `Job` (`result`: counts per step) |
+| POST | `/api/panel/snapshot` | — | 202 `Job` |
+| GET | `/api/panel/snapshot/status` | — | `Job` |
+
+Scout leads have `status: "filtered"` and these extra fields (null on older leads):
+
+```
+Lead (v2 additions) { source_posting_id, company_slug, department, location, remote: bool|null,
+                      employment_type, language: "nl"|"en", published_at, description, apply_url,
+                      skills: string[] }
+```
+
+`/mcp` routine tools: `run_scout(terms?)` · `snapshot_panel()` · `get_job(key)` · `refresh_rate_benchmarks()`.
+`503 provider_unavailable` when Oxylabs can't be used (e.g. `OXYLABS_WEB_API_KEY` missing).
