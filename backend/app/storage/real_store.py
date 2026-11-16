@@ -214,7 +214,8 @@ class RealStore:
                 f"SELECT * FROM leads WHERE status IN ({marks}) ORDER BY found_at DESC, id", statuses
             ).fetchall()
             columns.append({"name": col_name, "items": [
-                {"nickname": r["nickname"], "note": self._pipeline_note(r, col_name, now)} for r in rows
+                {"nickname": r["nickname"], "title": r["title"] or r["nickname"],
+                 "note": self._pipeline_note(r, col_name, now)} for r in rows
             ]})
         deadlines = self.conn.execute(
             "SELECT nickname, what, due_at FROM deadlines WHERE done = 0 ORDER BY due_at, id"

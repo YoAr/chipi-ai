@@ -23,7 +23,7 @@ export function MetricsView() {
             ? 'Showing 2 weeks of simulated history (sample data, not saved).'
             : 'See what Chipi learns after two weeks of outreach.'}
         </span>
-        <button className="btn btn-primary" onClick={() => setSimulated((s) => !s)}>
+        <button className="btn" onClick={() => setSimulated((s) => !s)}>
           {simulated ? 'Back to today' : 'Simulate 2 weeks'}
         </button>
       </div>

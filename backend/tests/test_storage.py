@@ -683,9 +683,10 @@ def test_state_and_pipeline_computed_from_tables(store):
     pipeline = store.get("pipeline")
     assert_same_shape(pipeline, fixture("pipeline"))
     cols = {c["name"]: c["items"] for c in pipeline["columns"]}
-    assert cols["Drafted"] == [{"nickname": "data-pipeline", "note": "Waiting for approval"}]
-    assert cols["Sent"] == [{"nickname": "react-rebuild", "note": "No reply, 9 days"}]
-    assert cols["Replied"] == [{"nickname": "payments-api", "note": "Reply received"}]
+    title = lambda nick: by_nick[nick]["title"]  # the board shows the lead's title, not its nickname
+    assert cols["Drafted"] == [{"nickname": "data-pipeline", "title": title("data-pipeline"), "note": "Waiting for approval"}]
+    assert cols["Sent"] == [{"nickname": "react-rebuild", "title": title("react-rebuild"), "note": "No reply, 9 days"}]
+    assert cols["Replied"] == [{"nickname": "payments-api", "title": title("payments-api"), "note": "Reply received"}]
     assert cols["Active"][0]["nickname"] == "saas-agent" and "Milestone 1" in cols["Active"][0]["note"]
     assert cols["Done"] == []
     assert [d["what"] for d in pipeline["deadlines"]] == ["Intro call", "Milestone 1", "Far away"]

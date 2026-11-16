@@ -79,7 +79,7 @@ export type Draft = {
 }
 
 export type Pipeline = {
-  columns: { name: string; items: { nickname: string; note: string }[] }[]
+  columns: { name: string; items: { nickname: string; title?: string; note: string }[] }[]
   deadlines: { nickname: string; what: string; due: string }[]
 }
 

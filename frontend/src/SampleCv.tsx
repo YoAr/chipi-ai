@@ -54,8 +54,10 @@ export function SampleCv({ disabled = false, onUsed }: { disabled?: boolean; onU
     }
   }
 
-  const useButton = (
-    <button className="btn btn-primary" onClick={use} disabled={disabled || busy}>
+  // Outlined on the profile screen (uploading your own CV is the main action there);
+  // the main action inside the pop-up.
+  const useButton = (primary: boolean) => (
+    <button className={primary ? 'btn btn-primary' : 'btn'} onClick={use} disabled={disabled || busy}>
       {busy ? 'Loading…' : 'Use this CV'}
     </button>
   )
@@ -69,7 +71,7 @@ export function SampleCv({ disabled = false, onUsed }: { disabled?: boolean; onU
         <div className="sample-cv-actions">
           <button className="btn btn-quiet" onClick={view} aria-haspopup="dialog">View CV</button>
           <a className="btn btn-quiet" href="/api/sample-cv/pdf" download>PDF</a>
-          {useButton}
+          {useButton(false)}
         </div>
       </div>
       {error && <p className="error small">{error}</p>}
@@ -88,7 +90,7 @@ export function SampleCv({ disabled = false, onUsed }: { disabled?: boolean; onU
           </div>
           <div className="sample-cv-actions">
             <a className="btn btn-quiet" href="/api/sample-cv/pdf" download>Download PDF</a>
-            {useButton}
+            {useButton(true)}
             <button className="btn btn-quiet cv-modal-close" onClick={() => setOpen(false)} aria-label="Close">
               <span aria-hidden="true">×</span>
             </button>

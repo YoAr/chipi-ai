@@ -56,7 +56,7 @@ export function Chat() {
       <form className="chat-form" onSubmit={send}>
         <label htmlFor="chat-input" className="sr-only">Message</label>
         <input id="chat-input" value={input} onChange={(e) => setInput(e.target.value)} placeholder="What should I charge?" />
-        <button className="btn btn-primary" disabled={busy || !input.trim()}>Send</button>
+        <button className="btn btn-secondary" disabled={busy || !input.trim()}>Send</button>
       </form>
     </aside>
   )

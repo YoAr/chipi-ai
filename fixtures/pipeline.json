@@ -1,10 +1,10 @@
 {
   "_sample": true,
   "columns": [
-    {"name": "Drafted", "items": [{"nickname": "data-pipeline", "note": "Waiting for approval"}]},
-    {"name": "Sent", "items": [{"nickname": "react-rebuild", "note": "No reply, 9 days"}]},
-    {"name": "Replied", "items": [{"nickname": "payments-api", "note": "Call booked Tuesday"}]},
-    {"name": "Active", "items": [{"nickname": "saas-agent", "note": "$120/hr · milestone 1 due Friday"}]},
+    {"name": "Drafted", "items": [{"nickname": "data-pipeline", "title": "Data pipeline cleanup, healthcare startup", "note": "Waiting for approval"}]},
+    {"name": "Sent", "items": [{"nickname": "react-rebuild", "title": "Full-stack React/Node rebuild (fixed price)", "note": "No reply, 9 days"}]},
+    {"name": "Replied", "items": [{"nickname": "payments-api", "title": "Backend engineer, payments API (contract, 3 months)", "note": "Call booked Tuesday"}]},
+    {"name": "Active", "items": [{"nickname": "saas-agent", "title": "AI agent integration for a B2B SaaS (part-time)", "note": "$120/hr · milestone 1 due Friday"}]},
     {"name": "Done", "items": []}
   ],
   "deadlines": [
