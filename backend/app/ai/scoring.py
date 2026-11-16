@@ -10,7 +10,9 @@ runs `run_search` in the background; the UI polls GET /api/search/status.
 - rules: deterministic signals weighted by WEIGHTS (skills overlap, rate fit,
   remote/location, avoided work, below the floor) plus a small nudge from the
   Learner's channel lessons ("A replies more than B") in the events log.
-- Below the rate floor: capped at 60 and the `why` says so.
+- Below the rate floor: capped at 60 and the `why` says so. The floor is the approved
+  profile's (EUR/hour, app.profiles.rate_floor); post rates are converted to EUR with
+  rough fixed rates, for ranking only. No approved floor: the below-floor rule is skipped.
 - Model unavailable: leads come back unscored (score None) instead of failing.
 """
 
@@ -22,7 +24,7 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel
 
-from .. import jobs
+from .. import jobs, profiles
 from ..config import Settings
 from . import client as ai
 
@@ -174,11 +176,21 @@ def avoids_hit(lead: dict, persona: dict) -> str | None:
 
 
 _NUM_RE = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*([kK])?")
-_FX_TO_USD = {"USD": 1.0, "EUR": 1.08, "GBP": 1.27}  # rough, for ranking only; never shown
+_FX_TO_EUR = {"EUR": 1.0, "USD": 0.92, "GBP": 1.17}  # rough, for ranking only; never shown
+
+
+def _currency(t: str) -> str:
+    if "€" in t or re.search(r"\beur(o|os)?\b", t):
+        return "EUR"
+    if "£" in t or re.search(r"\bgbp\b", t):
+        return "GBP"
+    if "$" in t or re.search(r"\busd\b", t):
+        return "USD"
+    return "EUR"  # no currency named: the market is the Netherlands
 
 
 def parse_hourly(rate_text: str | None) -> tuple[float, float] | None:
-    """(low, high) hourly in USD from a post's rate text, or None if it can't be read."""
+    """(low, high) hourly in EUR from a post's rate text, or None if it can't be read."""
     if not rate_text:
         return None
     t = rate_text.lower()
@@ -206,8 +218,7 @@ def parse_hourly(rate_text: str | None) -> tuple[float, float] | None:
         per = 1.0
     else:
         return None  # 500–20000 with no unit: can't tell
-    cur = "EUR" if ("€" in t or "eur" in t) else "GBP" if ("£" in t or "gbp" in t) else "USD"
-    fx = _FX_TO_USD[cur]
+    fx = _FX_TO_EUR[_currency(t)]
     return min(nums) / per * fx, max(nums) / per * fx
 
 
@@ -219,8 +230,20 @@ def _num(x) -> float | None:
 
 
 def _floor_ask(fit: dict | None) -> tuple[float | None, float | None]:
+    """(floor, ask) in EUR/hour. The floor is the approved profile's (run_search puts it on the fit);
+    an ask from an older fit in another currency is converted roughly, for ranking only."""
     rate = (fit or {}).get("rate") or {}
-    return _num(rate.get("floor")), _num(rate.get("ask"))
+    ask = _num(rate.get("ask"))
+    if ask is not None:
+        ask *= _FX_TO_EUR.get(str(rate.get("currency") or "EUR").upper(), 1.0)
+    return _num(rate.get("floor")), ask
+
+
+def with_approved_floor(fit: dict | None, floor: float | None) -> dict:
+    """The fit with rate.floor set to the approved profile's EUR floor (None: no below-floor rule)."""
+    fit = dict(fit or {})
+    fit["rate"] = {**(fit.get("rate") or {}), "floor": floor}
+    return fit
 
 
 def rate_signal(lead: dict, fit: dict | None) -> tuple[float, bool]:
@@ -362,9 +385,7 @@ def _clip(s: str, n: int) -> str:
 
 def _floor_note(lead: dict, fit: dict | None) -> str:
     floor, _ = _floor_ask(fit)
-    cur = ((fit or {}).get("rate") or {}).get("currency") or "USD"
-    sym = "$" if cur == "USD" else f"{cur} "
-    return f"Below your {sym}{floor:g}/h floor (post: {_clip(lead.get('rate_text') or '', 40)})"
+    return f"Below your €{floor:g}/h floor (post: {_clip(lead.get('rate_text') or '', 40)})"
 
 
 def _model_input(leads: list[dict], persona: dict) -> str:
@@ -459,7 +480,7 @@ def run_search(store, settings: Settings, keywords: list[str] | None = None) -> 
         for source in (remoteok, remotive, hn):
             found += source.fetch(client, words, limit=30)  # each returns [] on errors
     jobs.step(store, JOB, "scoring", f"Scoring {len(found)} posts")
-    fit = store.get("fit")
+    fit = with_approved_floor(store.get("fit"), profiles.rate_floor(store))
     lessons = current_lessons(settings)  # the Learner's channel lessons feed back into ranking
     best = rank_for_scoring(found, persona, fit, lessons)[:MAX_BATCH]
     scored = score_leads(best, persona, fit, settings, lessons=lessons)

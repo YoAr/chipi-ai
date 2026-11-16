@@ -202,12 +202,13 @@ def test_reply_or_win_before_sending_is_refused(client):
 
 # Learner write-back ----------------------------------------------------------
 def _split_goal(text: str) -> tuple[str, str]:
-    marker = text.index("DERIVED")
+    # The marker is the comment that starts with DERIVED (the fixed-core comment also mentions it)
+    marker = learning._DERIVED_RE.search(text).start()
     eol = text.index("\n", marker) + 1
     return text[:eol], text[eol:]
 
 
-def test_learning_page_and_goal_derived_written_core_untouched(client):
+def test_learning_page_and_goal_derived_written_core_untouched(client, approve_profile):
     data = client.app.state.store.data_dir
     goal_before = (data / "goal.md").read_text()
     core_before, derived_before = _split_goal(goal_before)
@@ -227,18 +228,21 @@ def test_learning_page_and_goal_derived_written_core_untouched(client):
     assert derived_after.startswith(derived_before.rstrip("\n"))  # the existing plan is kept
     assert derived_after.count(learning.BLOCK_START) == 1 and derived_after.count(learning.BLOCK_END) == 1
     assert "Reply rate by channel: RemoteOK" in derived_after
-    # The rate floor is still read from the core
+    # The rate floor isn't in goal.md any more: it comes from the approved profile, and write-back leaves it be
+    assert "Rate floor: set in your approved profile" in core_after
+    assert client.get("/api/fit").json()["rate"]["floor"] is None
+    approve_profile(client, 100)
     assert client.get("/api/fit").json()["rate"]["floor"] == 100
 
 
 def test_write_back_replaces_its_block_and_never_writes_without_a_marker(tmp_path):
-    text = "# Goal\n\n- Rate floor: $100/hour.\n\n<!-- ── DERIVED ── -->\n\n## Current plan\n- x\n"
+    text = "# Goal\n\n<!-- FIXED CORE: never edit above the DERIVED line. -->\n\n- Rate floor: set in your approved profile.\n\n<!-- ── DERIVED ── -->\n\n## Current plan\n- x\n"
     once = learning.with_derived_block(text, f"{learning.BLOCK_START}\nA\n{learning.BLOCK_END}")
     twice = learning.with_derived_block(once, f"{learning.BLOCK_START}\nB\n{learning.BLOCK_END}")
     assert once.startswith(text.split("## Current plan")[0]) and "\nA\n" in once
     assert "\nB\n" in twice and "\nA\n" not in twice and twice.count(learning.BLOCK_START) == 1
     assert twice.startswith(text)
-    assert learning.with_derived_block("# Goal\n- Rate floor: $100/hour.\n", "x") is None
+    assert learning.with_derived_block("# Goal\n<!-- never edit above the DERIVED line -->\n", "x") is None
 
 
 def test_write_back_failure_does_not_fail_the_click(client, monkeypatch):

@@ -31,6 +31,12 @@ from .mcp_server import create_mcp, mount_mcp
 from .passcode import install as install_passcode
 from .mock_store import MockStore, NotFound
 from .openai_check import STATUS as OPENAI_STATUS
+from .rates import refresh_benchmarks
+from . import jobs, scout
+from .providers.search import ProviderUnavailable
+from .routes import scout as scout_routes
+from .routes import interview as interview_routes
+import threading
 from .openai_check import check_models
 from .sim_timeline import demo_timeline
 from .sim_timeline import ready as sim_ready
@@ -45,8 +51,9 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 class _QueueAdapter:
     """What the MCP tools need: pending() and complete(). Mock mode has no queue."""
 
-    def __init__(self, store):
+    def __init__(self, store, settings: Settings | None = None):
         self.store = store
+        self.settings = settings
 
     def pending(self) -> list[dict]:
         return work_queue.pending(self.store.conn) if isinstance(self.store, RealStore) else []
@@ -55,6 +62,31 @@ class _QueueAdapter:
         if not isinstance(self.store, RealStore):
             raise NotFound("Mock mode has no work queue")
         return work_queue.complete(self.store.conn, id, ok, error)
+
+    def refresh_rates(self) -> dict:
+        if not isinstance(self.store, RealStore):
+            raise NotFound("Mock mode serves fixed sample rates")
+        return refresh_benchmarks(self.store.data_dir)
+
+    def start_job(self, key: str, fn, *args) -> dict:
+        """Start a background job (one run per key) and return its status for the routine to poll."""
+        if not isinstance(self.store, RealStore):
+            raise NotFound("Not available with sample data (MOCK_MODE=1)")
+        if jobs.begin(self.store, key, step="starting"):
+            threading.Thread(target=jobs.run, args=(self.store, key, fn, self.store, self.settings, *args),
+                             daemon=True, name=f"job-{key}").start()
+        return jobs.get(self.store, key)
+
+    def start_scout(self, terms: list[str] | None) -> dict:
+        return self.start_job(scout.JOB, scout.run_scout, terms)
+
+    def start_snapshot(self) -> dict:
+        return self.start_job(scout.SNAPSHOT_JOB, scout.run_snapshot)
+
+    def job_status(self, key: str) -> dict:
+        if key not in (scout.JOB, scout.SNAPSHOT_JOB):
+            raise NotFound(f"Unknown job {key}")
+        return jobs.get(self.store, key) if isinstance(self.store, RealStore) else jobs._idle()
 
 
 # Request bodies (shapes from docs/contract.md) ------------------------------
@@ -144,6 +176,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(search_routes.router)
     app.include_router(draft_routes.router)
     app.include_router(sample_cv_routes.router)
+    app.include_router(scout_routes.router)
+    app.include_router(interview_routes.router)
     install_passcode(app, settings)  # no-op unless DEMO_PASSCODE is set (public deploy)
     app.add_middleware(  # added last so it runs first: CORS headers on every reply, 401s included
         CORSMiddleware,
@@ -168,6 +202,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         code = {401: "unauthorized", 403: "forbidden", 404: "not_found", 413: "too_large",
                 415: "unsupported_file", 429: "rate_limited", 503: "unavailable"}.get(exc.status_code, "error")
         return _error(exc.status_code, code, str(exc.detail))
+
+    @app.exception_handler(ProviderUnavailable)
+    async def _provider_down(_: Request, exc: ProviderUnavailable) -> JSONResponse:
+        return _error(503, "provider_unavailable", str(exc))
 
     @app.exception_handler(AIUnavailable)
     async def _ai_down(_: Request, exc: AIUnavailable) -> JSONResponse:
@@ -343,7 +381,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return StreamingResponse(events(), media_type="text/event-stream")
 
     # Routine endpoint: same process, token-protected (see app/mcp_server.py)
-    mount_mcp(app, create_mcp(lambda: _QueueAdapter(store)), settings.mcp_token)
+    mount_mcp(app, create_mcp(lambda: _QueueAdapter(store, settings)), settings.mcp_token)
 
     # Website: landing page at "/", React app at "/app/" (registered last, after the API)
     if settings.landing_file.exists():

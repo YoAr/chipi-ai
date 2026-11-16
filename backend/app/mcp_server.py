@@ -51,6 +51,33 @@ def create_mcp(store_provider: StoreProvider) -> MCPServer:
         store_provider().complete(id, ok, error)
         return {"ok": True, "id": id}
 
+    @mcp.tool()
+    def refresh_rate_benchmarks() -> dict:
+        """Refresh Dutch freelance rate benchmarks (EUR/hour) from ZZPdock market data.
+
+        Saves each extract in raw/ and rewrites benchmarks.json. Returns which vakgebieden
+        were updated and which failed (the old figures are kept for those). Run daily.
+        """
+        return store_provider().refresh_rates()
+
+    @mcp.tool()
+    def run_scout(terms: list[str] | None = None) -> dict:
+        """Start a Scout run: find Amsterdam/NL Recruitee boards for the discovery terms (default:
+        the approved services' terms), read their postings, filter (≤ 30 days, NL or remote,
+        exclusions), tag language and skills, and add new leads. Returns the job; poll get_job("scout")."""
+        return store_provider().start_scout(terms)
+
+    @mcp.tool()
+    def snapshot_panel() -> dict:
+        """Start today's baseline-panel snapshot (demand index input). Run daily.
+        Returns the job; poll get_job("panel_snapshot")."""
+        return store_provider().start_snapshot()
+
+    @mcp.tool()
+    def get_job(key: str) -> dict:
+        """Status of a background job started from here: "scout" or "panel_snapshot"."""
+        return store_provider().job_status(key)
+
     return mcp
 
 

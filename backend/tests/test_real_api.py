@@ -30,7 +30,7 @@ def test_starts_empty_and_seeded(client, tmp_path):
     assert client.get("/api/state").json()["mode"] == "real"
     assert client.get("/api/leads").json()["leads"] == []
     assert (tmp_path / "data" / "goal.md").exists()  # seeded from repo data/
-    assert client.get("/api/fit").json()["rate"]["floor"] == 100  # read from goal.md
+    assert client.get("/api/fit").json()["rate"]["floor"] is None  # owned by the approved profile; none yet
 
 
 def test_seed_then_verdict_is_recorded_as_events(client, tmp_path):
@@ -43,7 +43,7 @@ def test_seed_then_verdict_is_recorded_as_events(client, tmp_path):
 def test_cv_upload_saves_file_and_text(client, tmp_path):
     res = client.post("/api/cv", files={"file": ("Sam CV.txt", b"Sam. Python and FastAPI, 5 years.", "text/plain")})
     assert res.status_code == 200
-    raw = sorted(p.name for p in (tmp_path / "data" / "raw").iterdir() if p.name != ".gitkeep")
+    raw = sorted(p.name for p in (tmp_path / "data" / "raw").iterdir() if "sam-cv" in p.name)
     assert len(raw) == 2  # the upload and its extracted text
 
 

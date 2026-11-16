@@ -104,7 +104,73 @@ CREATE TABLE IF NOT EXISTS metric_snapshots (
     n       INTEGER,
     PRIMARY KEY (week, name, segment)
 );
+
+-- Spec v2: companies with a public job board (Recruitee for now)
+CREATE TABLE IF NOT EXISTS companies (
+    source         TEXT NOT NULL,     -- recruitee
+    slug           TEXT NOT NULL,     -- {slug}.recruitee.com
+    name           TEXT,
+    domain         TEXT,
+    sector         TEXT,
+    discovered_via TEXT,              -- the search term, or "panel"
+    in_panel       INTEGER NOT NULL DEFAULT 0,  -- baseline panel for the demand index
+    first_seen     TEXT,
+    last_fetched   TEXT,
+    last_error     TEXT,
+    PRIMARY KEY (source, slug)
+);
+
+-- Spec v2: daily record of the baseline panel's postings (demand index input)
+CREATE TABLE IF NOT EXISTS posting_snapshots (
+    day             TEXT NOT NULL,    -- YYYY-MM-DD (UTC)
+    source          TEXT NOT NULL,
+    company_slug    TEXT NOT NULL,
+    posting_id      TEXT NOT NULL,
+    title           TEXT,
+    employment_type TEXT,
+    published_at    TEXT,
+    language        TEXT,
+    skills_json     TEXT,
+    PRIMARY KEY (day, source, posting_id)
+);
+CREATE INDEX IF NOT EXISTS posting_snapshots_day ON posting_snapshots(day);
+
+-- Spec v2: versioned documents with approval state (profile, services); see versions.py
+CREATE TABLE IF NOT EXISTS doc_versions (
+    name        TEXT NOT NULL,          -- profile | services
+    version     INTEGER NOT NULL,
+    json        TEXT NOT NULL,
+    status      TEXT NOT NULL,          -- draft | approved | superseded
+    author      TEXT NOT NULL,          -- agent | user
+    provenance  TEXT,                   -- JSON {model, prompt_version, input_ref, ts}
+    checks      TEXT,                   -- JSON [{name, passed, note}]
+    created_at  TEXT NOT NULL,
+    approved_at TEXT,
+    PRIMARY KEY (name, version)
+);
 """
+
+# Columns added after the first deploy. SQLite can't add columns in CREATE TABLE IF NOT
+# EXISTS, so they are added here when missing (additive only: never drop or rename).
+MIGRATIONS = {
+    "leads": [
+        ("source_posting_id", "TEXT"),   # e.g. recruitee:2823928
+        ("company_slug", "TEXT"),
+        ("department", "TEXT"),
+        ("location", "TEXT"),
+        ("remote", "INTEGER"),           # 1 remote, 0 not, NULL unknown
+        ("employment_type", "TEXT"),
+        ("language", "TEXT"),            # nl | en
+        ("published_at", "TEXT"),
+        ("description", "TEXT"),
+        ("apply_url", "TEXT"),
+        ("skills_json", "TEXT"),
+    ],
+}
+POST_MIGRATION_SQL = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS leads_source_posting ON leads(source_posting_id) "
+    "WHERE source_posting_id IS NOT NULL",
+)
 
 
 def connect(data_dir: Path) -> sqlite3.Connection:
@@ -123,8 +189,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
     """Create every table if missing. Safe to run on every start."""
     with WRITE_LOCK:
         conn.executescript(SCHEMA)
-        # Databases made before the post text was kept (the live volume) get the column added
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(leads)")}
-        if "description" not in cols:
-            conn.execute("ALTER TABLE leads ADD COLUMN description TEXT")
+        for table, columns in MIGRATIONS.items():
+            have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+            for name, sqltype in columns:
+                if name not in have:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {sqltype}")
+        for sql in POST_MIGRATION_SQL:
+            conn.execute(sql)
         conn.commit()

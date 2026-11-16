@@ -11,6 +11,9 @@ Save with store.add_draft({...}); shape: fixtures/drafts.json.
 Flow: write (smart) → code checks → one rewrite if a check the writer can fix failed →
 model check (check model, fresh context) → save, even when checks fail (the user decides).
 Channel and recipient are decided in code from the post, never by the model.
+
+Money is EUR per hour, excl. VAT. The floor is the approved profile's
+(app.profiles.rate_floor); with no approved profile nothing is priced, so no draft is written.
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ import re
 
 from pydantic import BaseModel
 
-from .. import guards, jobs
+from .. import guards, jobs, profiles
 from ..config import Settings
 from . import client as ai
 
@@ -37,9 +40,9 @@ CLAIMS_BACKED = "Claims backed by your CV"
 PROFESSIONAL_TONE = "Professional tone"
 # The writer controls the text, not the channel or recipient, so only these are worth a rewrite.
 REWRITABLE = {RATE_MATCHES, NOT_BELOW_FLOOR, LENGTH_ONE_ASK}
+NO_FLOOR = "Approve your profile first: it sets your minimum hourly rate."
 
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-_MONEY_RE = re.compile(r"\$\s?(\d[\d,]*(?:\.\d+)?)\s*([kK]\b)?")
 _WORD_RE = re.compile(r"\S+")
 
 
@@ -84,16 +87,17 @@ def _ask(fit: dict | None) -> float | None:
     return rate.get("ask")
 
 
-def _money(text: str) -> list[float]:
-    out = []
-    for num, k in _MONEY_RE.findall(text or ""):
-        value = float(num.replace(",", ""))
-        out.append(value * 1000 if k else value)
-    return out
+def _money(text: str) -> list[tuple[str, float]]:
+    """[(currency, amount)] for every amount of money in the text; anything but EUR is wrong here."""
+    return guards.money_amounts(text)
 
 
-def _fmt(n: float) -> str:
-    return str(int(n)) if float(n).is_integer() else f"{n:g}"
+def _show(cur: str, amount: float) -> str:
+    sym = {"EUR": "€", "USD": "$", "GBP": "£"}.get(cur, f"{cur} ")
+    return guards.fmt_eur(amount).replace("€", sym, 1)
+
+
+_eur = guards.fmt_eur
 
 
 def _allowlist(settings: Settings) -> list[str]:
@@ -103,13 +107,15 @@ def _allowlist(settings: Settings) -> list[str]:
     return [a.strip() for a in raw if a and a.strip()]
 
 
-def _floor(settings: Settings, fit: dict) -> int | None:
-    """The floor from the human-owned core of goal.md; the fit's floor only if goal.md has none."""
-    try:
-        return guards.parse_rate_floor((settings.data_dir / "goal.md").read_text(encoding="utf-8"))
-    except (OSError, guards.GuardError):
+def _floor(store, fit: dict | None) -> float:
+    """EUR/hour floor from the approved profile; the fit's floor only if there is none and the fit
+    has one. Neither: nothing may be priced, so no draft (ValueError, shown to the user)."""
+    floor = profiles.rate_floor(store)
+    if floor is None:
         floor = ((fit or {}).get("rate") or {}).get("floor")
-        return None if floor is None else int(floor)
+    if floor is None:
+        raise ValueError(NO_FLOOR)
+    return float(floor)
 
 
 def _cv_text(store, settings: Settings) -> str:
@@ -143,7 +149,8 @@ WRITER_INSTRUCTIONS = """You write a short first outreach message from a freelan
 Rules, all required:
 - Under 150 words in the body. Plain text, no markdown.
 - Exactly one clear ask: a short call (for example a 20-minute call this week). It is the only question in the body.
-- Quote the hourly rate exactly as given: {rate}. Mention no other dollar amount.
+- Quote the hourly rate exactly as given: {rate} (euros, excluding VAT). Mention no other amount of
+  money and never use dollars.
 - Mention only experience, skills, years and facts that appear in the freelancer's profile below.
   Never invent projects, clients, results, numbers or availability.
 - Where a fact would help but is not in the profile, write a bracketed placeholder in capitals,
@@ -159,7 +166,9 @@ def write_draft(lead: dict, persona: dict, fit: dict, settings: Settings, feedba
     ask = _ask(fit)
     if not fit or ask is None:
         raise ValueError("Build your profile first")
-    rate = f"${_fmt(ask)}/hour"
+    if ((fit.get("rate") or {}).get("currency") or "EUR") != "EUR":
+        raise ValueError("Your rate was worked out in another currency; rebuild your profile to get a rate in EUR")
+    rate = f"{_eur(ask)}/hour"
     payload = {
         "job_post": {k: lead.get(k) for k in ("title", "company", "url", "rate_text", "description") if lead.get(k)},
         "freelancer_profile": _persona_facts(persona or {}),
@@ -176,7 +185,7 @@ def write_draft(lead: dict, persona: dict, fit: dict, settings: Settings, feedba
     return {"subject": out.subject.strip(), "body": out.body.strip(), "channel": channel, "to": to}
 
 
-def code_checks(draft: dict, lead: dict, persona: dict, fit: dict, floor: int | None,
+def code_checks(draft: dict, lead: dict, persona: dict, fit: dict, floor: float | None,
                 allowlist: list[str] | None = None) -> list[dict]:
     """[{name, passed, note}]: rate matches ask, not below floor, ≤150 words/one ask, channel allowed.
 
@@ -187,25 +196,28 @@ def code_checks(draft: dict, lead: dict, persona: dict, fit: dict, floor: int | 
     quoted = _money(text)
     checks = []
 
-    # Rate matches your ask: the ask appears, and no other amount does.
+    # Rate matches your ask: the ask appears in euros, and no other amount (in any currency) does.
     if ask is None:
         checks.append({"name": RATE_MATCHES, "passed": False, "note": "No ask rate yet"})
     elif not quoted:
-        checks.append({"name": RATE_MATCHES, "passed": False, "note": f"Doesn't quote your ask of ${_fmt(ask)}/hour"})
+        checks.append({"name": RATE_MATCHES, "passed": False, "note": f"Doesn't quote your ask of {_eur(ask)}/hour"})
     else:
-        wrong = sorted({q for q in quoted if q != float(ask)})
+        wrong = sorted({(c, q) for c, q in quoted if c != "EUR" or q != float(ask)})
+        foreign = any(c != "EUR" for c, _ in wrong)
         checks.append({
             "name": RATE_MATCHES, "passed": not wrong,
             "note": "" if not wrong else
-            f"Quotes {', '.join('$' + _fmt(w) for w in wrong)}; your ask is ${_fmt(ask)}/hour",
+            f"Quotes {', '.join(_show(c, q) for c, q in wrong)}; your ask is {_eur(ask)}/hour"
+            + (" (quote in euros)" if foreign else ""),
         })
 
-    # Not below your floor: the ask and every amount quoted.
+    # Not below your floor (EUR): the ask and every euro amount quoted. Other currencies fail above.
     if floor is None:
-        checks.append({"name": NOT_BELOW_FLOOR, "passed": False, "note": "No rate floor found in goal.md"})
+        checks.append({"name": NOT_BELOW_FLOOR, "passed": False,
+                       "note": "No approved rate floor yet: approve your profile first"})
     else:
         below = []
-        for amount in ([ask] if ask is not None else []) + quoted:
+        for amount in ([ask] if ask is not None else []) + [q for c, q in quoted if c == "EUR"]:
             try:
                 guards.check_rate(amount, floor)
             except guards.GuardError:
@@ -213,7 +225,7 @@ def code_checks(draft: dict, lead: dict, persona: dict, fit: dict, floor: int | 
         checks.append({
             "name": NOT_BELOW_FLOOR, "passed": not below,
             "note": "" if not below else
-            f"{', '.join('$' + _fmt(b) for b in sorted(set(below)))} is below your floor of ${_fmt(floor)}/hour",
+            f"{', '.join(_eur(b) for b in sorted(set(below)))} is below your floor of {_eur(floor)}/hour",
         })
 
     # Under 150 words, one ask (one question in the body).
@@ -288,7 +300,7 @@ def run_draft(store, settings: Settings, lead_id: str) -> None:
     key = job_key(lead_id)
     lead = _find_lead(store, lead_id)
     persona, fit = store.get("persona"), store.get("fit")
-    floor = _floor(settings, fit)
+    floor = _floor(store, fit)
     allowlist = _allowlist(settings)
 
     jobs.step(store, key, "writing", "Writing your message")

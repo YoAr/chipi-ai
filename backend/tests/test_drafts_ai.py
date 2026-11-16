@@ -1,4 +1,6 @@
-"""Drafts AI: writer + verifier (app/ai/drafts.py). Never calls OpenAI: `ai.structured` is faked."""
+"""Drafts AI: writer + verifier (app/ai/drafts.py). Never calls OpenAI: `ai.structured` is faked.
+
+Money is EUR per hour; the floor is the approved profile's (approved at €100/hour in the fixtures)."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,19 +13,20 @@ from app.main import create_app
 FIT = {
     "fits": [{"name": "Backend + AI integration contracts", "level": "high",
               "reason": "Python APIs and LLM agent work", "sources": ["raw/cv.md"]}],
-    "rate": {"floor": 100, "ask": 120, "low": 110, "high": 140, "currency": "USD", "unit": "hour", "reasons": []},
+    "rate": {"floor": 100, "ask": 120, "low": 110, "high": 140, "currency": "EUR", "unit": "hour", "reasons": []},
     "goal_checks": [],
 }
-PERSONA = {"name": "Sam Rivera", "role": "Backend engineer", "years": 5, "location": "Boston",
+PERSONA = {"name": "Sam Rivera", "role": "Backend engineer", "years": 5, "location": "Amsterdam",
            "skills": ["Python", "FastAPI", "LLM agents"]}
 LEAD = {"title": "Backend engineer, payments API (contract)", "company": "Acme",
-        "url": "https://example.com/jobs/payments", "source": "remotive", "rate_text": "$120-140/hr",
+        "url": "https://example.com/jobs/payments", "source": "remotive", "rate_text": "€120-140/hr",
         "score": 90, "why": "Python + FastAPI", "fetched": True}
 
 GOOD_BODY = ("Hi [NAME],\n\nI saw your payments API post. I have 5 years of Python and FastAPI backend work: "
-             "[ONE RELEVANT PROJECT].\n\nI'm available [HOURS]/week at $120/hour. "
+             "[ONE RELEVANT PROJECT].\n\nI'm available [HOURS]/week at €120/hour. "
              "Could we do a 20-minute call this week?\n\nSam")
-WRONG_RATE_BODY = GOOD_BODY.replace("$120/hour", "$95/hour")
+WRONG_RATE_BODY = GOOD_BODY.replace("€120/hour", "€95/hour")
+DOLLAR_BODY = GOOD_BODY.replace("€120/hour", "$120/hour")
 
 
 def settings(tmp_path):
@@ -62,7 +65,8 @@ def app_client(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def store(app_client):
+def store(app_client, approve_profile):
+    approve_profile(app_client, 100)  # the approved profile owns the €100/hour floor
     return app_client.app.state.store
 
 
@@ -113,7 +117,8 @@ def test_wrong_rate_fails_the_check_and_gets_one_rewrite(app_client, store, lead
     assert job["status"] == "done"
     assert fake.roles() == ["smart", "smart", "check"]
     rewrite_input = fake.calls[1]["input"]
-    assert "Rate matches your ask" in rewrite_input and "$95" in rewrite_input
+    assert "Rate matches your ask" in rewrite_input and "€95" in rewrite_input
+    assert "€120/hour" in fake.calls[0]["input"]  # the writer is told to quote the ask in euros
     draft = store.drafts()["drafts"][0]
     assert draft["body"] == GOOD_BODY and draft["verifier"]["passed"] is True
 
@@ -132,7 +137,7 @@ def test_still_failing_draft_is_saved_with_passed_false(app_client, store, lead_
     checks = checks_by_name(draft)
     assert checks["Rate matches your ask"]["passed"] is False
     assert checks["Not below your floor"]["passed"] is False
-    assert "$95" in checks["Not below your floor"]["note"]
+    assert checks["Not below your floor"]["note"] == "€95 is below your floor of €100/hour"
 
 
 def test_no_fit_gives_a_clear_error(app_client, store, monkeypatch):
@@ -144,6 +149,40 @@ def test_no_fit_gives_a_clear_error(app_client, store, monkeypatch):
     job = app_client.get(f"/api/leads/{lid}/draft/status").json()
     assert job["status"] == "error" and job["error"] == "Build your profile first"
     assert fake.calls == [] and store.drafts()["drafts"] == []
+
+
+def test_no_approved_profile_gives_a_clear_error(app_client, monkeypatch):
+    store = app_client.app.state.store
+    store.update_persona(PERSONA)
+    store.set_doc("fit", {**FIT, "rate": {**FIT["rate"], "floor": None}})
+    lid = store.upsert_leads([LEAD])[0]["id"]
+    fake = FakeAI([GOOD_BODY])
+    monkeypatch.setattr(drafts.ai, "structured", fake)
+
+    app_client.post(f"/api/leads/{lid}/draft")
+    job = app_client.get(f"/api/leads/{lid}/draft/status").json()
+    assert job["status"] == "error"
+    assert job["error"] == "Approve your profile first: it sets your minimum hourly rate."
+    assert fake.calls == [] and store.drafts()["drafts"] == []
+
+
+def test_approved_floor_wins_over_the_fits_floor(app_client, store, approve_profile, monkeypatch):
+    approve_profile(app_client, 130)  # a newer approved profile raises the floor
+    store.set_doc("fit", FIT)  # an older fit that still says €100
+    lid = store.upsert_leads([LEAD])[0]["id"]
+    monkeypatch.setattr(drafts.ai, "structured", FakeAI([GOOD_BODY, GOOD_BODY]))
+    app_client.post(f"/api/leads/{lid}/draft")
+    floor_check = checks_by_name(store.drafts()["drafts"][0])["Not below your floor"]
+    assert floor_check["passed"] is False and floor_check["note"] == "€120 is below your floor of €130/hour"
+
+
+def test_dollar_amount_fails_the_rate_check(app_client, store, lead_id, monkeypatch):
+    fake = FakeAI([DOLLAR_BODY, GOOD_BODY])
+    monkeypatch.setattr(drafts.ai, "structured", fake)
+    app_client.post(f"/api/leads/{lead_id}/draft")
+    assert fake.roles() == ["smart", "smart", "check"]
+    assert "$120" in fake.calls[1]["input"] and "quote in euros" in fake.calls[1]["input"]
+    assert store.drafts()["drafts"][0]["verifier"]["passed"] is True
 
 
 def test_unsupported_claim_fails_the_model_check(app_client, store, lead_id, monkeypatch):
@@ -200,7 +239,7 @@ def test_email_channel_through_run_draft_uses_the_allowlist(app_client, store, l
 
 
 def test_code_checks_length_and_one_ask():
-    long_body = ("word " * 160) + "Could we talk? $120/hour"
+    long_body = ("word " * 160) + "Could we talk? €120/hour"
     checks = {c["name"]: c for c in drafts.code_checks(
         {"subject": "s", "body": long_body, "channel": "apply_link", "to": LEAD["url"]}, LEAD, PERSONA, FIT, 100)}
     assert checks["Under 150 words, one ask"]["passed"] is False
@@ -214,13 +253,13 @@ def test_code_checks_length_and_one_ask():
 
 
 def test_missing_rate_fails_and_ask_below_floor_fails():
-    no_rate = GOOD_BODY.replace(" at $120/hour", "")
+    no_rate = GOOD_BODY.replace(" at €120/hour", "")
     checks = {c["name"]: c for c in drafts.code_checks(
         {"subject": "s", "body": no_rate, "channel": "apply_link", "to": LEAD["url"]}, LEAD, PERSONA, FIT, 100)}
     assert checks["Rate matches your ask"]["passed"] is False
 
     low_fit = {**FIT, "rate": {**FIT["rate"], "ask": 90}}
-    body = GOOD_BODY.replace("$120", "$90")
+    body = GOOD_BODY.replace("€120", "€90")
     checks = {c["name"]: c for c in drafts.code_checks(
         {"subject": "s", "body": body, "channel": "apply_link", "to": LEAD["url"]}, LEAD, PERSONA, low_fit, 100)}
     assert checks["Rate matches your ask"]["passed"] is True
@@ -235,3 +274,21 @@ def test_model_check_is_a_fresh_check_model_call_with_the_cv(tmp_path, monkeypat
     assert [c["name"] for c in out] == ["Claims backed by your CV", "Professional tone"]
     assert fake.roles() == ["check"] and "Initech" in fake.calls[0]["input"]
     assert "rate_to_quote" not in fake.calls[0]["input"]  # nothing from the writer's prompt
+
+
+def test_money_in_euros_and_other_currencies_is_read():
+    d = {"subject": "s", "channel": "apply_link", "to": LEAD["url"]}
+    eur_word = {c["name"]: c for c in drafts.code_checks(
+        {**d, "body": GOOD_BODY.replace("€120/hour", "EUR 120 per hour")}, LEAD, PERSONA, FIT, 100)}
+    assert eur_word["Rate matches your ask"]["passed"] is True
+    dollars = {c["name"]: c for c in drafts.code_checks({**d, "body": DOLLAR_BODY}, LEAD, PERSONA, FIT, 100)}
+    assert dollars["Rate matches your ask"]["passed"] is False
+    assert dollars["Rate matches your ask"]["note"] == "Quotes $120; your ask is €120/hour (quote in euros)"
+    assert dollars["Not below your floor"]["passed"] is True  # the ask itself is fine; the currency is not
+
+
+def test_fit_in_another_currency_is_not_quoted(tmp_path, monkeypatch):
+    monkeypatch.setattr(drafts.ai, "structured", FakeAI([GOOD_BODY]))
+    usd_fit = {**FIT, "rate": {**FIT["rate"], "currency": "USD"}}
+    with pytest.raises(ValueError, match="rebuild your profile"):
+        drafts.write_draft(LEAD, PERSONA, usd_fit, settings(tmp_path))

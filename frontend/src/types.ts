@@ -109,3 +109,55 @@ export type ChatEvent =
   | { type: 'tool'; name: string; status: 'running' | 'done' }
   | { type: 'done' }
   | { type: 'error'; message: string }
+
+/* Spec v2: Interviewer and versioned profile (see docs/contract.md, proposed) */
+export type InterviewTurn = {
+  question: string
+  resume_line: string | null
+  reflection: string
+  topic: string
+  answer: string | null
+}
+
+export type InterviewState = {
+  status: 'not_started' | 'active' | 'complete' | 'extracted'
+  language?: 'nl' | 'en'
+  turns: InterviewTurn[]
+  progress: { asked: number; left: number; max: number } | null
+  transcript_ref?: string | null
+  job: Job
+}
+
+export type ProofStrength = 'claimed' | 'demonstrated' | 'referenceable'
+
+export type ProfileData = {
+  skills: {
+    name: string
+    taxonomy_id: string | null
+    evidence: { claim: string; metric: string | null; client: string | null; citable: boolean }[]
+    proof_strength: ProofStrength
+  }[]
+  skill_combinations: { skills: string[]; evidence: string }[]
+  industries: string[]
+  preferred_work: string[]
+  exclusions: string[]
+  rate_floor_eur_hour: number | null
+  availability_hours_week: number | null
+  past_employers: string[]
+  schools: string[]
+  languages: ('nl' | 'en')[]
+  voice_samples: string[]
+}
+
+export type ProfileVersion = {
+  version: number
+  status: 'draft' | 'approved' | 'superseded'
+  author: 'agent' | 'user'
+  data: ProfileData
+  checks: Check[]
+  provenance: { model: string | null; prompt_version: string | null; input_ref: unknown; ts: string } | null
+  created_at: string
+  approved_at: string | null
+}
+
+export type ProfileDoc = { latest: ProfileVersion | null; approved: ProfileVersion | null }

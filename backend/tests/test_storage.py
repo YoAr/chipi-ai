@@ -156,7 +156,7 @@ def test_events_validate_type_actor_subject_payload(tmp_path, type_, actor, subj
 def test_events_all_documented_types_accepted(tmp_path):
     for t in events.EVENT_TYPES:
         events.append_event(tmp_path, t, "agent", "goal", {})
-    assert len(events.read_events(tmp_path)) == 24  # 23 + draft_sent (after-approval send path)
+    assert len(events.read_events(tmp_path)) == 25  # + profile_approved, draft_sent
 
 
 def test_events_read_rejects_bad_since_and_handles_missing_file(tmp_path):
@@ -387,7 +387,7 @@ def test_new_store_seeds_and_has_empty_valid_shapes(store, tmp_path):
     fit = store.get("fit")
     assert_same_shape(fit, fixture("fit"))
     assert fit["fits"] == [] and fit["rate"]["ask"] is None
-    assert fit["rate"]["floor"] == 100  # from goal.md's fixed core
+    assert fit["rate"]["floor"] is None  # owned by the approved profile; none yet
     assert fit["rate"]["currency"] == "USD" and fit["rate"]["unit"] == "hour"
 
     assert store.get("offers") == {"offers": []}
@@ -445,7 +445,7 @@ def test_partial_docs_are_filled_to_valid_shapes(store):
     store.set_doc("fit", {"fits": [], "rate": {"ask": 120}})
     fit = store.get("fit")
     assert set(fit["rate"]) == set(fixture("fit")["rate"]) and fit["rate"]["ask"] == 120
-    assert fit["rate"]["floor"] == 100
+    assert fit["rate"]["floor"] is None
     store.set_doc("metrics", {"guardrails": {"unapproved_sends": 0}})
     assert set(store.get("metrics")["guardrails"]) == set(fixture("metrics")["guardrails"])
 

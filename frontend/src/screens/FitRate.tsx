@@ -3,12 +3,13 @@ import type { Tab } from '../App'
 import type { Fit } from '../types'
 import { Checks, Empty, Loading, Page } from '../ui'
 
-const SCALE_MAX = 200 // $/hour shown on the rate bar
+const SCALE_MAX = 200 // per hour, shown on the rate bar
 
 export function FitRate({ go }: { go: (t: Tab) => void }) {
   const { data, error } = useApi<Fit>('/api/fit')
   if (!data) return <Loading error={error} />
   const { rate } = data
+  const c = rate.currency === 'USD' ? '$' : '€' // spec v2 prices in EUR; an old fit may still say USD
   const pct = (v: number) => `${Math.min(100, (v / SCALE_MAX) * 100)}%`
 
   if (rate.low == null || rate.high == null || rate.ask == null || rate.floor == null) {
@@ -17,7 +18,7 @@ export function FitRate({ go }: { go: (t: Tab) => void }) {
         <Empty title="No rate yet"
                action={<button className="btn btn-primary" onClick={() => go('onboarding')}>Go to your profile</button>}>
           Chipi works out where you fit and what to charge once it has read your CV.
-          {rate.floor != null && ` It will never suggest less than your floor of $${rate.floor}/hour.`}
+          {rate.floor != null && ` It will never suggest less than your floor of ${c}${rate.floor}/hour.`}
         </Empty>
       </Page>
     )
@@ -41,13 +42,13 @@ export function FitRate({ go }: { go: (t: Tab) => void }) {
 
         <div className="card">
           <h2>Suggested rate</h2>
-          <p className="big">${rate.low}–{rate.high} <span className="muted">/ {rate.unit}</span></p>
-          <div className="ratebar" role="img" aria-label={`Suggested $${rate.low} to $${rate.high}, floor $${rate.floor}, ask $${rate.ask}`}>
+          <p className="big">{c}{rate.low}–{rate.high} <span className="muted">/ {rate.unit}</span></p>
+          <div className="ratebar" role="img" aria-label={`Suggested ${c}${rate.low} to ${c}${rate.high}, floor ${c}${rate.floor}, ask ${c}${rate.ask}`}>
             <div className="ratebar-band" style={{ left: pct(rate.low), width: `calc(${pct(rate.high)} - ${pct(rate.low)})` }} />
-            <div className="ratebar-floor" style={{ left: pct(rate.floor) }} title={`Floor $${rate.floor}`} />
+            <div className="ratebar-floor" style={{ left: pct(rate.floor) }} title={`Floor ${c}${rate.floor}`} />
           </div>
-          <div className="ratebar-scale muted small"><span>$0</span><span>${SCALE_MAX / 2}</span><span>${SCALE_MAX}/hr</span></div>
-          <p className="small">Ask <b>${rate.ask}</b> · never below your floor of <b>${rate.floor}</b></p>
+          <div className="ratebar-scale muted small"><span>{c}0</span><span>{c}{SCALE_MAX / 2}</span><span>{c}{SCALE_MAX}/hr</span></div>
+          <p className="small">Ask <b>{c}{rate.ask}</b> · never below your floor of <b>{c}{rate.floor}</b></p>
           <h3>Why this number</h3>
           <ul className="reasons">
             {rate.reasons.map((r) => (

@@ -6,7 +6,9 @@ Rules for writing code in this repo. Short on purpose; every rule matters.
 
 1. **Nothing is sent, accepted or priced without the user's approval.** Enforced
    in code at the send path, not only in prompts.
-2. **Never below the rate floor** in `data/goal.md` (fixed core). Code check.
+2. **Never below the rate floor** in the freelancer's **approved profile** (EUR/hour,
+   `app.profiles.rate_floor`). Code check (`guards.check_rate`); with no approved profile,
+   nothing is priced.
 3. **Never invent a fact.** Every claim in a draft, rate or fit must trace to a
    file in `data/raw/` or a fetched job post. A gap is written as a gap.
 4. **Email only to the allowlist** (`EMAIL_ALLOWLIST`) on the demo deploy.

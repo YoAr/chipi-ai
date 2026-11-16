@@ -34,7 +34,9 @@ CHANNEL_LABELS = {
     "seed": "Pasted link",
 }
 
-_DERIVED_RE = re.compile(r"<!--[\s\u2500-]*DERIVED[^>]*-->", re.IGNORECASE)  # same marker app.guards splits on
+# Only the comment that *starts* with DERIVED ("<!-- ──── DERIVED: …"): the fixed-core comment above
+# it also mentions "the DERIVED line". Same marker app.ai.profile splits goal.md on.
+_DERIVED_RE = re.compile(r"<!--[\s\u2500-]*DERIVED[^>]*-->", re.IGNORECASE)
 BLOCK_START = "<!-- LIVE NUMBERS: rewritten by code after every send, reply or win. -->"
 BLOCK_END = "<!-- /LIVE NUMBERS -->"
 _write_lock = threading.Lock()

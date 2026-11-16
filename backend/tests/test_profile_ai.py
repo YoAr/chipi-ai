@@ -1,4 +1,7 @@
-"""Profile AI (app/ai/profile.py) with a fake `ai.structured`: no network, no OpenAI."""
+"""Profile AI (app/ai/profile.py) with a fake `ai.structured`: no network, no OpenAI.
+
+Money is EUR per hour excl. VAT; the floor comes from the approved profile (app.profiles.rate_floor).
+The data dir is seeded from the repo's data/, so benchmarks.json is the ZZPdock EUR file."""
 
 import json
 
@@ -36,19 +39,19 @@ def fit_proposal(cv_source, low=110, ask=120, high=140, floor=100, reason_source
                             sources=[cv_source]),
         ],
         rate=profile.RateProposal(floor=floor, low=low, ask=ask, high=high, reasons=[
-            profile.RateReason(text="Boston agencies bill $115–135/hour", source=reason_source),
-            profile.RateReason(text="Break-even is $120–145/hour", source="data/benchmarks.json#salary_equivalent"),
+            profile.RateReason(text="Dutch ICT freelancers publish €95–120/hour", source=reason_source),
+            profile.RateReason(text="Project managers publish €103–128/hour", source="data/benchmarks.json#hourly"),
         ]),
     )
 
 
 OFFERS = profile.OfferSet(offers=[
     profile.OfferItem(name="Roll-out lead", pitch="Lead a system roll-out end to end.",
-                      price="$12,000 fixed (≈ $125/hour)", evidence="17 posts mention roll-outs",
+                      price="€12,000 fixed (≈ €125/hour)", evidence="17 posts mention roll-outs",
                       fit="Led roll-outs across 6 distribution centres; 99 sites"),
     profile.OfferItem(name="Project rescue", pitch="Get a stalled project back on track in 3 weeks.",
-                      price="$6,000 fixed", evidence="[N] posts mention rescue", fit="10 years of delivery"),
-    profile.OfferItem(name="Fractional PM", pitch="10 hours a week.", price="$5,000 / month",
+                      price="€6,000 fixed", evidence="[N] posts mention rescue", fit="10 years of delivery"),
+    profile.OfferItem(name="Fractional PM", pitch="10 hours a week.", price="€5,000 / month",
                       evidence="Demand for part-time PMs", fit="Matches available hours"),
 ])
 
@@ -77,10 +80,20 @@ def cv_source_from(input_text):
 
 
 @pytest.fixture()
-def app(tmp_path, monkeypatch):
-    def make(fake):
+def app(tmp_path, monkeypatch, approve_profile):
+    """app(fake) -> TestClient with a profile approved at a €100/hour floor; app(fake, floor=None): none approved."""
+    class Client(TestClient):
+        def __enter__(self):
+            c = super().__enter__()
+            if self.floor is not None:
+                approve_profile(c, self.floor, **self.profile_fields)
+            return c
+
+    def make(fake, floor=100, **profile_fields):
         monkeypatch.setattr(profile.ai, "structured", fake)
-        return TestClient(create_app(settings(tmp_path)))
+        client = Client(create_app(settings(tmp_path)))
+        client.floor, client.profile_fields = floor, profile_fields
+        return client
     return make
 
 
@@ -110,7 +123,7 @@ def test_happy_path_through_the_route(app, tmp_path):
     assert set(fit["rate"]) == set(sample_fit["rate"])
     assert set(fit["fits"][0]) == set(sample_fit["fits"][0])
     assert fit["rate"] | {"reasons": None} == {"floor": 100, "ask": 120, "low": 110, "high": 140,
-                                               "currency": "USD", "unit": "hour", "reasons": None}
+                                               "currency": "EUR", "unit": "hour", "reasons": None}
     assert all(ch["passed"] for ch in fit["goal_checks"]) and len(fit["goal_checks"]) == 5
 
     sample_offers = json.loads((REPO_ROOT / "fixtures" / "offers.json").read_text())
@@ -126,7 +139,10 @@ def test_happy_path_through_the_route(app, tmp_path):
     persona_md, rate_md = (wiki / "persona.md").read_text(), (wiki / "rate.md").read_text()
     assert "Senior Project Manager" in persona_md and "raw/" in persona_md
     assert "I made this up" not in persona_md  # quotes not found in the CV are dropped
-    assert "$110–140/hour" in rate_md and "data/benchmarks.json#hourly" in rate_md
+    assert "€110–140/hour" in rate_md and "data/benchmarks.json#hourly" in rate_md
+    assert "Floor €100/hour (approved profile)" in rate_md and "$" not in rate_md
+    fit_input = next(call["input"] for call in fake.calls if call["schema"] == "FitProposal")
+    assert '"rate_floor_eur_per_hour_excl_vat": 100' in fit_input
     index = (wiki / "index.md").read_text()
     assert "[persona.md](persona.md)" in index and "[rate.md](rate.md)" in index
     assert "profile built" in (wiki / "log.md").read_text()
@@ -147,13 +163,14 @@ def test_fit_failing_code_checks_is_retried_then_saved_with_passed_false(app):
 
     assert fake.count("FitProposal") == 3  # first try + two retries
     retry_inputs = [call["input"] for call in fake.calls if call["schema"] == "FitProposal"][1:]
-    assert all("It failed these checks" in i and "Floor matches goal.md" in i for i in retry_inputs)
+    assert all("It failed these checks" in i and "Floor matches your approved profile" in i for i in retry_inputs)
     assert job["status"] == "done" and job["result"] == {"checks_passed": False}
     assert "checks didn't pass" in job["message"]
     failed = {ch["name"] for ch in fit["goal_checks"] if not ch["passed"]}
-    assert failed == {"Floor matches goal.md", "Floor ≤ low ≤ ask ≤ high", "Range inside the benchmarks",
+    assert failed == {"Floor matches your approved profile", "Floor ≤ low ≤ ask ≤ high", "Range inside the benchmarks",
                       "Every source is allowed"}
     assert all(ch.get("note") for ch in fit["goal_checks"] if not ch["passed"])
+    assert fit["rate"]["floor"] == 100  # the approved floor is shown, not the model's 80
 
 
 def test_fit_retry_that_fixes_the_checks_passes(app):
@@ -183,6 +200,19 @@ def test_persona_without_cv_builds_fit_and_offers(app):
     fit_input = next(call["input"] for call in fake.calls if call["schema"] == "FitProposal")
     assert '"Project manager"' in fit_input
     assert fit["rate"]["ask"] == 120 and len(offers["offers"]) == 3
+
+
+def test_no_approved_profile_fails_before_any_model_call(app):
+    fake = FakeAI(PersonaExtraction=[PERSONA], FitProposal=[lambda i: fit_proposal(cv_source_from(i))],
+                  OfferSet=[OFFERS])
+    with app(fake, floor=None) as c:
+        c.post("/api/sample-cv/use")
+        job = build(c)
+        fit = c.get("/api/fit").json()
+    assert job["status"] == "error"
+    assert job["error"] == "Approve your profile first: it sets your minimum hourly rate."
+    assert fake.calls == []  # nothing is priced, and no model call is wasted
+    assert fit["rate"]["floor"] is None and fit["rate"]["ask"] is None
 
 
 def test_no_cv_and_no_persona_fails_with_a_clear_message(app):
@@ -230,11 +260,44 @@ def test_offer_below_floor_is_retried_then_repriced_at_the_ask(app):
         build(c)
         offers = c.get("/api/offers").json()["offers"]
     assert fake.count("OfferSet") == 3
-    assert offers[0]["price"] == "$120/hour"
+    assert offers[0]["price"] == "€120/hour"
+
+
+def test_offer_in_dollars_is_retried_then_repriced_in_euros(app):
+    dollars = profile.OfferSet(offers=[o.model_copy(update={"price": "$12,000 fixed (≈ $125/hour)"}) if i == 0 else o
+                                       for i, o in enumerate(OFFERS.offers)])
+    fake = FakeAI(PersonaExtraction=[PERSONA], FitProposal=[lambda i: fit_proposal(cv_source_from(i))],
+                  OfferSet=[dollars])
+    with app(fake) as c:
+        c.post("/api/sample-cv/use")
+        build(c)
+        offers = c.get("/api/offers").json()["offers"]
+    assert fake.count("OfferSet") == 3
+    retry = [call["input"] for call in fake.calls if call["schema"] == "OfferSet"][1]
+    assert "Prices in euros" in retry
+    assert offers[0]["price"] == "€120/hour" and offers[1]["price"] == "€6,000 fixed"
+
+
+def test_approved_profile_fields_are_not_overwritten_by_the_cv(app):
+    cv = profile.PersonaExtraction(name="Sam Verhoeven", role="Senior Project Manager", years=10, location="",
+                                   skills=["PRINCE2", "Budgeting"], wants="Anything", avoids="Nothing", quotes=[])
+    fake = FakeAI(PersonaExtraction=[cv], FitProposal=[lambda i: fit_proposal(cv_source_from(i))],
+                  OfferSet=[OFFERS])
+    approved = {"skills": [{"name": "dbt", "taxonomy_id": None, "evidence": [], "proof_strength": "claimed"}],
+                "preferred_work": ["Data platform rescues"], "exclusions": ["CMS maintenance"],
+                "availability_hours_week": 24}
+    with app(fake, **approved) as c:
+        c.post("/api/sample-cv/use")
+        assert build(c)["status"] == "done"
+        persona = c.get("/api/persona").json()
+    assert persona["skills"] == ["dbt"]
+    assert persona["wants"] == "Data platform rescues" and persona["avoids"] == "CMS maintenance"
+    assert persona["hours_per_week"] == 24
+    assert persona["role"] == "Senior Project Manager" and persona["years"] == 10  # the CV still fills the rest
 
 
 def test_goal_checks_are_pure_code():
-    allowed = ["data/benchmarks.json#hourly", "data/benchmarks.json#salary_equivalent", "raw/cv.txt"]
+    allowed = ["data/benchmarks.json#hourly", "raw/cv.txt"]
     ok = fit_proposal("raw/cv.txt").model_dump()
     assert all(c["passed"] for c in profile.goal_checks(ok, 100, (47, 200), allowed))
     data_prefixed = fit_proposal("data/raw/cv.txt").model_dump()  # same file, written with data/
@@ -246,3 +309,36 @@ def test_goal_checks_are_pure_code():
     no_source["fits"][0]["sources"] = []
     failed = [c["name"] for c in profile.goal_checks(no_source, 100, (47, 200), allowed) if not c["passed"]]
     assert failed == ["Each fit has a source"]
+
+    # The user's own floor is never "too high": the cap is at least the floor
+    high_floor = fit_proposal("raw/cv.txt", floor=300, low=300, ask=300, high=300).model_dump()
+    assert all(c["passed"] for c in profile.goal_checks(high_floor, 300, (47, 200), allowed))
+    salary = fit_proposal("raw/cv.txt", reason_source="data/benchmarks.json#salary_equivalent").model_dump()
+    failed = [c["name"] for c in profile.goal_checks(salary, 100, (47, 200), allowed) if not c["passed"]]
+    assert failed == ["Every source is allowed"]  # no salary break-even in the EUR benchmarks
+
+
+def test_benchmark_range_and_sources_follow_the_eur_file(tmp_path):
+    bench = json.loads((REPO_ROOT / "data" / "benchmarks.json").read_text())
+    assert bench["currency"] == "EUR" and "salary_equivalent" not in bench
+    lows = [bench["hourly"][0]["low"]] + [r["low"] for r in bench["hourly"][0]["roles"]]
+    highs = [bench["hourly"][0]["high"]] + [r["high"] for r in bench["hourly"][0]["roles"]]
+    assert profile.benchmark_range(bench) == (min(lows), max(highs))
+    with_salary = {**bench, "salary_equivalent": {"break_even_hourly": {"low": 40, "high": 300}}}
+    assert profile.benchmark_range(with_salary) == (40, 300)
+    with pytest.raises(ValueError, match="not EUR"):
+        profile.benchmark_range({**bench, "currency": "USD"})
+    with pytest.raises(ValueError, match="no hourly figures"):
+        profile.benchmark_range({"hourly": []})
+
+    class Store:
+        def get_setting(self, key, default=None):
+            return None
+
+        def get(self, name):
+            return {"sources": ["raw/cv.pdf"]}
+
+    allowed = profile.allowed_sources(Store(), settings(tmp_path), bench)
+    assert "data/benchmarks.json#hourly" in allowed and bench["hourly"][0]["raw"] in allowed
+    assert "data/benchmarks.json#salary_equivalent" not in allowed
+    assert "data/benchmarks.json#salary_equivalent" in profile.allowed_sources(Store(), settings(tmp_path), with_salary)

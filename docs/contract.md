@@ -132,6 +132,55 @@ Job { status: "idle" | "running" | "done" | "error",
   `verifier.checks`.
 - `GET /api/state` → `mode` is `"real"` or `"mock"`; the UI hides AI buttons in `"mock"`.
 
+## Proposed: spec v2 Scout (pending partner OK; see docs/plan-agents-v2.md)
+
+Real mode only (409 with sample data). 202 + poll, same `Job` shape as the AI actions.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/api/scout` | `{terms?: string[]}` (≤ 10; default: approved services' discovery terms, else profile skills) | 202 `Job` |
+| GET | `/api/scout/status` | — | `Job` (`result`: counts per step) |
+| POST | `/api/panel/snapshot` | — | 202 `Job` |
+| GET | `/api/panel/snapshot/status` | — | `Job` |
+
+Scout leads have `status: "filtered"` and these extra fields (null on older leads):
+
+```
+Lead (v2 additions) { source_posting_id, company_slug, department, location, remote: bool|null,
+                      employment_type, language: "nl"|"en", published_at, description, apply_url,
+                      skills: string[] }
+```
+
+`/mcp` routine tools: `run_scout(terms?)` · `snapshot_panel()` · `get_job(key)` · `refresh_rate_benchmarks()`.
+`503 provider_unavailable` when Oxylabs can't be used (e.g. `OXYLABS_WEB_API_KEY` missing).
+
+## Proposed: spec v2 Interviewer and profile (pending partner OK)
+
+Real mode only. Interview turns answer directly; building the profile is a background job.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/api/interview` | — | `Interview` |
+| POST | `/api/interview/start` | `{language: "nl"\|"en", segment?}` (needs an uploaded CV) | `Interview` with the first question |
+| POST | `/api/interview/answer` | `{answer}` (1–4000 chars) | `Interview` (next question; when complete, the profile job starts) |
+| POST | `/api/interview/finish` | — | 202 `Interview` (ends early / rebuilds; profile job starts) |
+| GET | `/api/profile` | — | `{latest: ProfileVersion\|null, approved: ProfileVersion\|null}` |
+| PUT | `/api/profile` | `Profile` (spec §5.1 contract) | `ProfileVersion` (new draft, author "user") |
+| POST | `/api/profile/approve` | `{version}` | `ProfileVersion` (409 if no rate floor or not a draft) |
+
+```
+Interview { status: "not_started"|"active"|"complete"|"extracted", language, segment,
+            turns: [{question, resume_line|null, reflection, topic, answer|null}],
+            progress: {asked, left, max: 15} | null, transcript_ref, job: Job }
+ProfileVersion { version, status: "draft"|"approved"|"superseded", author: "agent"|"user",
+                 data: Profile, checks: [{name, passed, note}],
+                 provenance: {model, prompt_version, input_ref, ts}, created_at, approved_at }
+```
+
+Approving sets the rate floor (EUR/hour) every price check uses, hands the exclusions to Scout,
+updates `/api/persona` (skills, wants, avoids, hours) and appends a `profile_approved` event.
+`/api/fit` `rate.floor` is null until a profile is approved.
+
 ## Simulate 2 weeks (`GET /api/metrics?simulate_weeks=true`)
 
 Returns the usual Metrics shape for a generated two-week history, plus `simulated: true`

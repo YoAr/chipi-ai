@@ -1,4 +1,6 @@
-"""Lead scoring (app/ai/scoring.py). Never calls OpenAI: `ai.structured` is monkeypatched."""
+"""Lead scoring (app/ai/scoring.py). Never calls OpenAI: `ai.structured` is monkeypatched.
+
+The floor is the approved profile's, in EUR/hour; post rates are converted to EUR for ranking."""
 
 import json
 from datetime import datetime, timedelta, timezone
@@ -17,7 +19,7 @@ PERSONA = {
     "wants": "Interim project management",
     "avoids": "Pure Scrum Master roles; travel of more than a week a month",
 }
-FIT = {"rate": {"floor": 100, "ask": 120, "currency": "USD", "unit": "hour"}}
+FIT = {"rate": {"floor": 100, "ask": 120, "currency": "EUR", "unit": "hour"}}
 
 
 def settings(tmp_path):
@@ -26,7 +28,7 @@ def settings(tmp_path):
                     openai_key_set=True, model_smart="m", model_check="m", model_fast="m")
 
 
-def lead(id, source="remoteok", rate="$120–140/hr", desc="Interim PM for a system roll-out", **kw):
+def lead(id, source="remoteok", rate="€120–140/hr", desc="Interim PM for a system roll-out", **kw):
     return {"id": id, "title": kw.pop("title", "Interim project manager"), "company": "Acme",
             "source": source, "url": f"https://example.com/{id}", "fetched": True,
             "rate_text": rate, "description": desc, "score": None, "why": "", "status": "new", **kw}
@@ -90,22 +92,36 @@ def test_lead_the_model_skipped_is_left_unscored(tmp_path, monkeypatch):
 
 # Floor -----------------------------------------------------------------------
 
-@pytest.mark.parametrize("rate", ["$60–85/hr", "$100,000-$150,000/year", "€60/hour", "$90k"])
+@pytest.mark.parametrize("rate", ["$60–85/hr", "$100,000-$150,000/year", "€60/hour", "$90k", "$105/hr",
+                                  "€720/day"])
 def test_below_floor_is_capped_at_60_and_says_so(tmp_path, monkeypatch, rate):
     fake_model(monkeypatch, {0: (100, "Exactly the roll-out work you want")})
     l = lead("a", rate=rate, desc="System roll-outs, budgeting and stakeholder management")
     [out] = scoring.score_leads([l], PERSONA, FIT, settings(tmp_path), lessons=[])
     assert out["score"] <= 60
-    assert out["why"].startswith("Below your $100/h floor")
+    assert out["why"].startswith("Below your €100/h floor")
     assert rate in out["why"]  # quotes the post, doesn't invent a converted number
     assert "Exactly the roll-out work" in out["why"]
 
 
 def test_range_reaching_the_floor_is_not_capped(tmp_path, monkeypatch):
     fake_model(monkeypatch, {0: (100, "Great fit")})
-    l = lead("a", rate="$80–110/hr", desc="System roll-outs, budgeting and stakeholder management")
+    l = lead("a", rate="€80–110/hr", desc="System roll-outs, budgeting and stakeholder management")
     [out] = scoring.score_leads([l], PERSONA, FIT, settings(tmp_path), lessons=[])
     assert out["score"] > 60 and "floor" not in out["why"]
+
+
+def test_post_rates_are_converted_to_eur():
+    assert scoring.parse_hourly("€100–120/hour") == (100, 120)
+    low, high = scoring.parse_hourly("$100–120/hr")
+    assert low == pytest.approx(100 * scoring._FX_TO_EUR["USD"]) and high < 120
+    assert scoring.parse_hourly("€800/day") == (100, 100)
+    assert scoring.parse_hourly("95 per hour") == (95, 95)  # no currency named: EUR (the Dutch market)
+
+
+def test_ask_from_an_older_usd_fit_is_converted_for_ranking():
+    usd = {"rate": {"floor": 100, "ask": 130, "currency": "USD"}}
+    assert scoring._floor_ask(usd) == (100, pytest.approx(130 * scoring._FX_TO_EUR["USD"]))
 
 
 def test_no_floor_known_means_no_cap(tmp_path, monkeypatch):
@@ -265,6 +281,7 @@ class FakeStore:
 def test_run_search_ranks_applies_lessons_and_saves(tmp_path, monkeypatch):
     from app.sources import hn, remoteok, remotive
 
+    monkeypatch.setattr(scoring.profiles, "rate_floor", lambda store: 100.0)  # the approved profile's floor
     s = settings(tmp_path)
     _write_events(s.data_dir, {"HN Who's Hiring": (12, 10), "RemoteOK": (12, 1)})
     weak = [lead(f"w{i}", source="remotive", rate="$20/hr", desc="Data entry") for i in range(25)]
@@ -287,3 +304,29 @@ def test_run_search_ranks_applies_lessons_and_saves(tmp_path, monkeypatch):
     scores = [l["score"] for l in store.saved]
     assert scores == sorted(scores, reverse=True)
     assert jobs.get(store, scoring.JOB)["status"] == "done"
+
+
+def _run_search_with_floor(tmp_path, monkeypatch, approved_floor, fit):
+    from app.sources import hn, remoteok, remotive
+
+    monkeypatch.setattr(scoring.profiles, "rate_floor", lambda store: approved_floor)
+    monkeypatch.setattr(remotive, "fetch", lambda c, w, limit=30: [lead("cheap", source="remotive", rate="€90/hour")])
+    monkeypatch.setattr(remoteok, "fetch", lambda c, w, limit=30: [])
+    monkeypatch.setattr(hn, "fetch", lambda c, w, limit=30: [])
+    fake_model(monkeypatch, {0: (90, "Roll-out work")})
+    store = FakeStore()
+    store.docs["fit"] = fit
+    jobs.begin(store, scoring.JOB, step="fetching", message="")
+    scoring.run_search(store, settings(tmp_path))
+    return store.saved[0]
+
+
+def test_run_search_uses_the_approved_floor_not_the_fits(tmp_path, monkeypatch):
+    stale = {"rate": {"floor": 50, "ask": 120, "currency": "EUR"}}
+    out = _run_search_with_floor(tmp_path, monkeypatch, 95.0, stale)
+    assert out["why"].startswith("Below your €95/h floor") and out["score"] <= 60
+
+
+def test_run_search_without_an_approved_floor_skips_the_floor_rule(tmp_path, monkeypatch):
+    out = _run_search_with_floor(tmp_path, monkeypatch, None, FIT)
+    assert "floor" not in out["why"] and out["score"] is not None

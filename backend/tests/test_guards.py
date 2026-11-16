@@ -4,34 +4,16 @@ from fastapi.testclient import TestClient
 
 from app.guards import (
     GuardError, RateLimiter, check_rate, check_recipient, check_send_allowed,
-    is_http_url, parse_rate_floor, require_token,
+    is_http_url, require_token,
 )
-
-GOAL = """# Goal
-<!-- FIXED CORE -->
-## Limits
-- Rate floor: $100/hour. Never quote below it.
-<!-- ───── DERIVED: rewritten ───── -->
-- Rate floor: $5/hour (bogus)
-"""
-
-
-def test_parse_floor():
-    assert parse_rate_floor(GOAL) == 100
-
-
-def test_parse_floor_missing_or_only_derived():
-    with pytest.raises(GuardError):
-        parse_rate_floor("# nothing")
-    with pytest.raises(GuardError):
-        parse_rate_floor("<!-- DERIVED -->\n- Rate floor: $5/hour")
-
 
 def test_check_rate():
     check_rate(100, 100)
     check_rate(150.5, 100)
     with pytest.raises(GuardError):
         check_rate(99.99, 100)
+    with pytest.raises(GuardError, match="approve your profile"):
+        check_rate(150, None)  # no approved profile: nothing may be priced
 
 
 def test_send_allowed():
@@ -92,9 +74,15 @@ def test_rate_limiter():
     assert rl.check("a")
 
 
-def test_rate_floor_reads_the_real_goal_file():
-    # The fixed-core comment also says "the DERIVED line"; the split must use the marker itself.
-    from app.config import REPO_ROOT
-    from app.guards import parse_rate_floor
 
-    assert parse_rate_floor((REPO_ROOT / "data" / "goal.md").read_text()) > 0
+def test_money_amounts_reads_euros_and_flags_other_currencies():
+    from app.guards import fmt_eur, money_amounts, parse_amount
+
+    assert money_amounts("€120/hour") == [("EUR", 120.0)]
+    assert money_amounts("EUR 120 per hour, or 120 euro") == [("EUR", 120.0), ("EUR", 120.0)]
+    assert money_amounts("€6.000 fixed (≈ €125/hour)") == [("EUR", 6000.0), ("EUR", 125.0)]
+    assert money_amounts("$95/hour and £80") == [("USD", 95.0), ("GBP", 80.0)]
+    assert money_amounts("€120k") == [("EUR", 120000.0)]
+    assert money_amounts("5 years, a 20-minute call") == []
+    assert parse_amount("97,50") == 97.5 and parse_amount("1,200.50") == 1200.5 and parse_amount("1.200") == 1200
+    assert fmt_eur(100.0) == "€100" and fmt_eur(97.5) == "€97.5"
