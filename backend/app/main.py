@@ -34,17 +34,13 @@ from .metrics import compute_metrics
 from .mock_store import MockStore, NotFound
 from .openai_check import STATUS as OPENAI_STATUS
 from .openai_check import check_models
-from .simulate import simulate
+from .sim_timeline import demo_timeline
 from .storage import RealStore
 from .storage import queue as work_queue
 from .storage.events import read_events
 from .storage.wiki import save_raw
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-# "Simulate 2 weeks" demo: channel reply rates chosen so one lesson clears the
-# Learner's confidence bar (see tests/test_metrics.py for the no-false-lesson check).
-DEMO_TRUE_RATES = {"Direct email": 0.65, "HN Who's Hiring": 0.45, "Web search": 0.3, "RemoteOK": 0.1}
-DEMO_SIM = {"days": 14, "seed": 3, "sends_per_day": 6}
 
 
 def _iso_week(now: datetime) -> str:
@@ -131,7 +127,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         await check_models(settings)
+        # Warm the "Simulate 2 weeks" timeline in the background (a few seconds, then cached)
+        warm = asyncio.create_task(asyncio.to_thread(demo_timeline))
         yield
+        warm.cancel()
 
     app = FastAPI(title="Chipi API", version="0.3.0", lifespan=lifespan)
     # Shared with the route modules in app/routes/ (see app/deps.py)
@@ -232,13 +231,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return store.get("pipeline")
 
     @app.get("/api/metrics")
-    def metrics(simulate_weeks: bool = False) -> dict:
-        # ?simulate_weeks=true: the "simulate 2 weeks" demo. Computed from a generated
-        # history in memory; nothing is written to the real events log.
+    async def metrics(simulate_weeks: bool = False) -> dict:
+        # ?simulate_weeks=true: the "simulate 2 weeks" demo: final metrics plus a day-by-day
+        # timeline from a generated history. Nothing is written to the real events log.
         if simulate_weeks:
-            events = simulate(true_rates=DEMO_TRUE_RATES, **DEMO_SIM)
-            last = datetime.fromisoformat(events[-1]["ts"].replace("Z", "+00:00"))
-            return {**compute_metrics(events, _iso_week(last)), "simulated": True}
+            return await asyncio.to_thread(demo_timeline)
         if settings.mock_mode:
             return store.get("metrics")
         return compute_metrics(read_events(settings.data_dir), _iso_week(datetime.now(timezone.utc)))

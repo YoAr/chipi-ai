@@ -96,3 +96,10 @@ Job { status: "idle" | "running" | "done" | "error",
   plus a fresh-context model check), and adds it to `/api/drafts?status=pending` with its
   `verifier.checks`.
 - `GET /api/state` → `mode` is `"real"` or `"mock"`; the UI hides AI buttons in `"mock"`.
+
+## Simulate 2 weeks (`GET /api/metrics?simulate_weeks=true`)
+
+Returns the usual Metrics shape for a generated two-week history, plus `simulated: true`
+and `timeline`: one snapshot per day, `[{day, headline, channels, learning, guardrails}]`,
+day 0 = before any outreach. Computed once at startup and cached; nothing touches real data.
+The minutes headline is a rolling 7 days here, so it doesn't reset mid-animation.
