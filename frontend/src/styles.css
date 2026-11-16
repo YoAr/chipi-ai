@@ -235,3 +235,10 @@ textarea { width: 100%; padding: 12px 14px; resize: vertical; line-height: 1.6; 
 .badge-ok { background: var(--mint); color: var(--accent-dark); }
 .field-wide { flex: 1 1 100%; }
 .field-wide input { width: 100%; }
+
+/* Spec v2: services */
+.big-num { font-family: var(--display); font-size: 22px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.demand { display: flex; flex-direction: column; gap: 6px; background: var(--bg); border-radius: var(--r-inner); padding: 12px 14px; }
+.demand-label { display: flex; justify-content: space-between; font-size: var(--fs-small); }
+.meter { height: 8px; border-radius: var(--r-pill); background: var(--line); overflow: hidden; }
+.meter span { display: block; height: 100%; background: var(--accent); border-radius: var(--r-pill); }

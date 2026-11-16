@@ -21,7 +21,7 @@ EVENTS_FILENAME = "events.jsonl"
 
 USER_TYPES = (
     "lead_verdict", "draft_edited", "draft_approved", "draft_rejected", "rate_decision",
-    "steering_note", "seed_added", "goal_core_edited", "persona_updated", "profile_approved",
+    "steering_note", "seed_added", "goal_core_edited", "persona_updated", "profile_approved", "services_approved",
 )
 WORLD_TYPES = (
     "reply_received", "no_reply_timeout", "call_booked", "contract_won", "contract_lost",

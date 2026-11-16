@@ -145,3 +145,29 @@ ProfileVersion { version, status: "draft"|"approved"|"superseded", author: "agen
 Approving sets the rate floor (EUR/hour) every price check uses, hands the exclusions to Scout,
 updates `/api/persona` (skills, wants, avoids, hours) and appends a `profile_approved` event.
 `/api/fit` `rate.floor` is null until a profile is approved.
+
+## Proposed: spec v2 Offer designer and services (pending partner OK)
+
+Real mode only. Needs an approved profile.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/api/services/build` | — | 202 `Job` |
+| GET | `/api/services/status` | — | `Job` (`result.version` when done) |
+| GET | `/api/services` | — | `{latest: ServicesVersion\|null, approved: ServicesVersion\|null}` |
+| PUT | `/api/services` | `{services: Service[]}` (1–5) | `ServicesVersion` (new draft, author "user"; 409 below the floor) |
+| POST | `/api/services/approve` | `{version}` | `ServicesVersion` |
+
+```
+Service { id, name, target_buyer, problem, deliverable, duration_weeks, skills_used: string[],
+          rate_range_eur: {min, max}, demand_index: 0-1, proof_strength, independence_rationale,
+          rationale, discovery_terms: {nl: string[], en: string[]},
+          demand: {value, posting_signal, best: {skills, count, n, share, lift, premium,
+                   contract_share, trend, signal}, proof_factor, weights, no_market_data, explanation} }
+ServicesVersion = ProfileVersion with data: {services: Service[], market: <demand inputs table>}
+```
+
+`demand_index` and `proof_strength` are computed in code (app/demand.py), never by the model.
+Approving hands the services' NL and EN discovery terms to Scout (`POST /api/scout` default) and
+appends a `services_approved` event. The Offers tab is labelled "Services"; in sample-data mode
+it still shows `/api/offers`.

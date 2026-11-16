@@ -158,3 +158,23 @@ export type ProfileVersion = {
 }
 
 export type ProfileDoc = { latest: ProfileVersion | null; approved: ProfileVersion | null }
+
+export type ServiceItem = {
+  id: string
+  name: string
+  target_buyer: string
+  problem: string
+  deliverable: string
+  duration_weeks: number
+  skills_used: string[]
+  rate_range_eur: { min: number; max: number }
+  demand_index: number
+  proof_strength: ProofStrength
+  independence_rationale: string
+  rationale: string
+  discovery_terms: { nl: string[]; en: string[] }
+  demand: { value: number | null; explanation: string; proof_factor: number }
+}
+
+export type ServicesVersion = Omit<ProfileVersion, 'data'> & { data: { services: ServiceItem[] } }
+export type ServicesDoc = { latest: ServicesVersion | null; approved: ServicesVersion | null }

@@ -13,6 +13,7 @@ step so the funnel (spec §10) starts at "discovered".
 from __future__ import annotations
 
 import re
+from itertools import zip_longest
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -61,7 +62,10 @@ def default_terms(store) -> list[str]:
     """Approved services' discovery terms (NL + EN) when they exist, else the persona's skills."""
     terms = store.get_setting("discovery_terms")  # set on services approval (Offer designer milestone)
     if isinstance(terms, dict):
-        merged = [t for lang in ("nl", "en") for t in terms.get(lang) or []]
+        # Interleave NL and EN so a cap of MAX_TERMS still searches both languages
+        nl, en = terms.get("nl") or [], terms.get("en") or []
+        merged = [t for pair in zip_longest(nl, en) for t in pair if t]
+        merged = list(dict.fromkeys(merged))
         if merged:
             return merged[:MAX_TERMS]
     return skills_for(store)[:MAX_TERMS]

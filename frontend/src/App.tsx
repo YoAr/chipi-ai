@@ -8,6 +8,7 @@ import { Today } from './screens/Today'
 import { Onboarding } from './screens/Onboarding'
 import { FitRate } from './screens/FitRate'
 import { Offers } from './screens/Offers'
+import { Services } from './screens/Services'
 import { Leads } from './screens/Leads'
 import { Drafts } from './screens/Drafts'
 import { PipelineView } from './screens/Pipeline'
@@ -17,7 +18,7 @@ const TABS = [
   ['today', 'Today'],
   ['onboarding', 'Your profile'],
   ['fit', 'Fit & rate'],
-  ['offers', 'Offers'],
+  ['offers', 'Services'],
   ['leads', 'Leads'],
   ['drafts', 'Drafts'],
   ['pipeline', 'Pipeline'],
@@ -73,7 +74,7 @@ export default function App() {
           {tab === 'today' && <Today go={go} />}
           {tab === 'onboarding' && <Onboarding go={go} />}
           {tab === 'fit' && <FitRate go={go} />}
-          {tab === 'offers' && <Offers go={go} />}
+          {tab === 'offers' && (mode === 'real' ? <Services go={go} /> : <Offers go={go} />)}
           {tab === 'leads' && <Leads go={go} />}
           {tab === 'drafts' && <Drafts go={go} />}
           {tab === 'pipeline' && <PipelineView />}

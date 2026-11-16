@@ -38,6 +38,7 @@ from . import jobs, scout
 from .providers.search import ProviderUnavailable
 from .routes import scout as scout_routes
 from .routes import interview as interview_routes
+from .routes import services as services_routes
 import threading
 from .openai_check import check_models
 from .simulate import simulate
@@ -176,6 +177,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sample_cv_routes.router)
     app.include_router(scout_routes.router)
     app.include_router(interview_routes.router)
+    app.include_router(services_routes.router)
     install_passcode(app, settings)  # no-op unless DEMO_PASSCODE is set (public deploy)
     app.add_middleware(  # added last so it runs first: CORS headers on every reply, 401s included
         CORSMiddleware,
