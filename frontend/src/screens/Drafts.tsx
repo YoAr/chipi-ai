@@ -4,6 +4,7 @@ import type { Tab } from '../App'
 import { useIsReal } from '../mode'
 import type { Draft } from '../types'
 import { Checks, Empty, Loading, Page } from '../ui'
+import { DraftsV2 } from './DraftsV2'
 
 function DraftCard({ draft, real, onDone }: { draft: Draft; real: boolean; onDone: (note: string) => void }) {
   const [body, setBody] = useState(draft.body)
@@ -60,6 +61,10 @@ function DraftCard({ draft, real, onDone }: { draft: Draft; real: boolean; onDon
 
 export function Drafts({ go }: { go: (t: Tab) => void }) {
   const real = useIsReal()
+  return real ? <DraftsV2 go={go} /> : <SampleDrafts go={go} real={real} />
+}
+
+function SampleDrafts({ go, real }: { go: (t: Tab) => void; real: boolean }) {
   const { data, error, reload } = useApi<{ drafts: Draft[] }>('/api/drafts?status=pending')
   const [notice, setNotice] = useState<string | null>(null)
   if (!data) return <Loading error={error} />

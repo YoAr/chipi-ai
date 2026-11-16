@@ -31,7 +31,7 @@ ACTIONS = [
 ]
 
 
-@pytest.mark.parametrize("start, status", ACTIONS)
+@pytest.mark.parametrize("start, status", [a for a in ACTIONS if "draft" not in a[0]])  # drafts are built (spec v2)
 def test_unbuilt_pieces_fail_with_a_readable_error(client, start, status):
     assert client.post(start).status_code == 202
     job = client.get(status).json()  # TestClient runs background tasks before returning
@@ -68,7 +68,8 @@ def test_search_passes_keywords(client, monkeypatch):
 def test_draft_result_carries_draft_id(client, monkeypatch):
     from app import jobs
     monkeypatch.setattr(drafts, "run_draft",
-                        lambda store, s, lead_id: jobs.done(store, drafts.job_key(lead_id), "Draft ready", {"draft_id": "dr_1"}))
+                        lambda store, s, lead_id, language=None: jobs.done(store, drafts.job_key(lead_id), "Draft ready",
+                                                                           {"draft_id": "dr_1"}))
     client.post("/api/leads/ld_9/draft")
     assert client.get("/api/leads/ld_9/draft/status").json()["result"] == {"draft_id": "dr_1"}
 

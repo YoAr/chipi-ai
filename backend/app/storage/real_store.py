@@ -29,8 +29,9 @@ LEAD_STATUSES = tuple(dict.fromkeys(LEGACY_LEAD_STATUSES + TRACKER_STATUSES))
 POSTING_FIELDS = ("source_posting_id", "company_slug", "department", "location", "remote", "employment_type",
                   "language", "published_at", "description", "apply_url")
 VERDICTS = ("useful", "maybe", "skip")
-DRAFT_STATUSES = ("pending", "approved", "sent", "rejected")
-CHANNELS = ("email", "apply_link")
+DRAFT_STATUSES = ("pending", "approved", "sent", "rejected",
+                  "ready", "needs_human", "copied", "superseded")   # spec v2: ready | needs_human -> copied
+CHANNELS = ("email", "apply_link", "apply_interim", "warm_intro", "direct_note")
 PIPELINE_COLUMNS = (
     ("Drafted", ("drafted",)),
     ("Sent", ("sent",)),
@@ -503,9 +504,12 @@ class RealStore:
             "verifier": verifier or {"passed": False, "checks": []},
             "status": row["status"], "created_at": row["created_at"],
         }
-        for extra in ("approved_at", "sent_at", "reject_note"):
+        for extra in ("approved_at", "sent_at", "reject_note", "language", "round", "forwardable_blurb",
+                      "hook_source_url", "service_id", "final_text", "copied_at"):
             if row[extra] is not None:
                 draft[extra] = row[extra]
+        if row["claims_json"]:
+            draft["claims_used"] = json.loads(row["claims_json"])
         return draft
 
     def _draft_row(self, draft_id: str) -> sqlite3.Row:
@@ -561,6 +565,69 @@ class RealStore:
                     {"draft_id": draft_id, "lead_id": lead_id, "template": row["template_version"]})
         return self._draft_out(row)
 
+    # Spec v2 drafts ------------------------------------------------------
+    def save_v2_draft(self, d: dict) -> dict:
+        """Store a Writer/Verifier draft. Earlier open drafts for the same lead and language are
+        superseded; the lead moves to "ready" (passed) or "drafted" (needs the freelancer's review)."""
+        if d["status"] not in ("ready", "needs_human") or d["channel"] not in CHANNELS:
+            raise ValueError("bad v2 draft")
+        draft_id = _new_id("dr")
+        with db.WRITE_LOCK, self.conn:
+            lead = self._lead_row(d["lead_id"])
+            self.conn.execute("UPDATE drafts SET status = 'superseded' WHERE lead_id = ? AND language = ? "
+                              "AND status IN ('ready', 'needs_human')", (d["lead_id"], d["language"]))
+            self.conn.execute(
+                "INSERT INTO drafts (id, lead_id, nickname, channel, to_addr, subject, body, template_version, "
+                "verifier_json, status, created_at, language, round, forwardable_blurb, claims_json, "
+                "hook_source_url, service_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (draft_id, d["lead_id"], lead["nickname"], d["channel"], lead["apply_url"] or lead["url"],
+                 d.get("subject"), d["body"], d.get("template_version"), json.dumps(d["verifier"], ensure_ascii=False),
+                 d["status"], _now(), d["language"], d["round"], d.get("forwardable_blurb"),
+                 json.dumps(d.get("claims_used") or [], ensure_ascii=False), d.get("hook_source_url"), d.get("service_id")),
+            )
+            if lead["status"] in ("researched", "drafted", "verified", "ready"):
+                self.conn.execute("UPDATE leads SET status = ? WHERE id = ?",
+                                  ("ready" if d["status"] == "ready" else "drafted", d["lead_id"]))
+            row = self._draft_row(draft_id)
+        subject = self._subject(row)
+        self._event("draft_created", "agent", subject, {"draft_id": draft_id, "lead_id": d["lead_id"],
+                                                        "template": d.get("template_version"), "language": d["language"],
+                                                        "rounds": d["round"], "status": d["status"]})
+        if d["status"] == "needs_human":
+            self._event("verifier_failed", "agent", subject, {"draft_id": draft_id,
+                                                              "failed": [c["name"] for c in d["verifier"]["checks"] if not c["passed"]]})
+        return self._draft_out(row)
+
+    def copy_draft(self, draft_id: str, final_text: str) -> dict:
+        """The freelancer copied the draft to send it themselves: their approval (spec v2 §2.1)."""
+        if not isinstance(final_text, str) or not final_text.strip():
+            raise ValueError("final_text is required")
+        with db.WRITE_LOCK, self.conn:
+            row = self._draft_row(draft_id)
+            if row["status"] not in ("ready", "needs_human", "copied"):
+                raise ValueError(f"Draft {draft_id} is {row['status']}; it can't be copied")
+            self.conn.execute("UPDATE drafts SET status = 'copied', final_text = ?, copied_at = COALESCE(copied_at, ?) "
+                              "WHERE id = ?", (final_text, _now(), draft_id))
+            if row["lead_id"]:
+                self.conn.execute("UPDATE leads SET status = 'copied' WHERE id = ? AND status IN "
+                                  "('researched', 'drafted', 'verified', 'ready')", (row["lead_id"],))
+        subject = self._subject(row)
+        edited = final_text.strip() != (row["body"] or "").strip()
+        if edited:
+            self._event("draft_edited", "user", subject, {"draft_id": draft_id, "before": row["body"],
+                                                          "after": final_text, "template": row["template_version"]})
+        self._event("draft_copied", "user", subject, {"draft_id": draft_id, "lead_id": row["lead_id"],
+                                                      "channel": row["channel"], "language": row["language"],
+                                                      "edited": edited, "passed_verifier": row["status"] == "ready"})
+        return self._draft_out(self._draft_row(draft_id))
+
+    def leads_to_draft(self, limit: int) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT l.id FROM leads l WHERE l.status = 'researched' AND NOT EXISTS "
+            "(SELECT 1 FROM drafts d WHERE d.lead_id = l.id AND d.status != 'superseded') "
+            "ORDER BY l.score DESC, l.published_at DESC LIMIT ?", (int(limit),)).fetchall()
+        return [self.lead(r["id"]) for r in rows]
+
     def approve_draft(self, draft_id: str, final_text: str) -> dict:
         """Approve (not send): status "approved", approved_at, and queue kind="send" ref=draft_id."""
         if not isinstance(final_text, str) or not final_text.strip():
@@ -586,8 +653,8 @@ class RealStore:
     def reject_draft(self, draft_id: str, note: str) -> dict:
         with db.WRITE_LOCK, self.conn:
             row = self._draft_row(draft_id)
-            if row["status"] != "pending":
-                raise ValueError(f"Draft {draft_id} is {row['status']}; only a pending draft can be rejected")
+            if row["status"] not in ("pending", "ready", "needs_human"):
+                raise ValueError(f"Draft {draft_id} is {row['status']}; only an open draft can be rejected")
             self.conn.execute("UPDATE drafts SET status = 'rejected', reject_note = ? WHERE id = ?",
                               (note or "", draft_id))
         payload = {"draft_id": draft_id}

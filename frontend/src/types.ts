@@ -68,6 +68,7 @@ export type Lead = {
   remote?: boolean | null
   language?: 'nl' | 'en' | null
   published_at?: string | null
+  apply_url?: string | null
   skills?: string[]
   research_error?: string
   brief?: LeadBrief
@@ -89,13 +90,18 @@ export type Draft = {
   id: string
   lead_id: string
   nickname: string
-  channel: 'email' | 'apply_link'
+  channel: 'email' | 'apply_link' | 'apply_interim' | 'warm_intro' | 'direct_note'
   to: string
   subject: string
   body: string
-  verifier: { passed: boolean; checks: Check[] }
+  verifier: { passed: boolean; checks: Check[]; rounds?: number; guidance?: string[] }
   status: string
   created_at: string
+  // Spec v2
+  language?: 'nl' | 'en'
+  forwardable_blurb?: string
+  final_text?: string
+  copied_at?: string
 }
 
 export type Pipeline = {

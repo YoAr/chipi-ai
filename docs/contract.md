@@ -197,3 +197,24 @@ Brief { fit, fit_reason, service_id|null,
 ```
 
 `/mcp`: `research_leads(limit)`; poll `get_job("research")`.
+
+## Proposed: spec v2 Writer + Verifier and the draft view (pending partner OK)
+
+Real mode only. Nothing is ever sent: the freelancer copies a draft and sends it themselves.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/api/leads/{id}/draft` | `{language?: "nl"\|"en"}` (rewrite in that language) | 202 `Job` (`result: {draft_id, status}`) |
+| GET | `/api/leads/{id}/draft/status` | — | `Job` |
+| POST | `/api/drafts/write` | `{limit?: 1-25}` (researched leads without a draft) | 202 `Job` |
+| GET | `/api/drafts/write/status` | — | `Job` |
+| POST | `/api/drafts/{id}/copied` | `{final_text}` | `Draft` (status `copied`; the freelancer's approval) |
+| POST | `/api/drafts/{id}/reject` | `{note}` | `Draft` (also for `ready` / `needs_human`) |
+
+Draft statuses add `ready` (passed every check), `needs_human` (still failing after 2 revisions),
+`copied` and `superseded` (replaced by a newer draft in the same language). Channels add
+`apply_interim`, `warm_intro`, `direct_note`. v2 drafts also carry `language`, `round`,
+`forwardable_blurb`, `claims_used`, `hook_source_url`, `service_id`, `final_text`, `copied_at`, and
+`verifier: {passed, pass, rounds, checks: [{name, passed, note}], issues, revision_notes, history,
+guidance: string[], provenance}`. Copying appends `draft_copied` (and `draft_edited` if the text changed).
+`/mcp`: `write_drafts(limit)`; poll `get_job("drafts")`.

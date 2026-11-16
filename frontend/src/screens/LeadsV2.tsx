@@ -19,8 +19,9 @@ const CHANNEL: Record<string, string> = {
 
 const date = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
 
-function LeadCard({ lead, services }: { lead: Lead; services: Record<string, string> }) {
+function LeadCard({ lead, services, go }: { lead: Lead; services: Record<string, string>; go: (t: Tab) => void }) {
   const b = lead.brief
+  const draft = useJob(`/api/leads/${lead.id}/draft`, `/api/leads/${lead.id}/draft/status`, () => go('drafts'), false)
   return (
     <div className="card lead">
       <div className="interview-head">
@@ -50,6 +51,12 @@ function LeadCard({ lead, services }: { lead: Lead; services: Record<string, str
           </p>
         </div>
       )}
+      {b && b.fit && lead.status === 'researched' && (
+        <div><button className="btn" disabled={draft.running} onClick={() => draft.start()}>
+          {draft.running ? 'Writing and checking…' : 'Write draft'}
+        </button></div>
+      )}
+      <JobStatus job={draft.job} startError={draft.startError} />
       {b && !b.fit && <p className="small muted"><b>Dropped:</b> {b.fit_reason}</p>}
       {lead.research_error && !b && <p className="small error">Research didn’t finish: {lead.research_error}</p>}
     </div>
@@ -104,7 +111,7 @@ export function LeadsV2({ go }: { go: (t: Tab) => void }) {
         </Empty>
       ) : (
         <div className="list">
-          {leads.data.leads.map((l) => <LeadCard key={l.id} lead={l} services={names} />)}
+          {leads.data.leads.map((l) => <LeadCard key={l.id} lead={l} services={names} go={go} />)}
         </div>
       )}
     </Page>

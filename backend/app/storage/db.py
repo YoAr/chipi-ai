@@ -173,6 +173,16 @@ MIGRATIONS = {
         ("skills_json", "TEXT"),
         ("research_error", "TEXT"),      # last Researcher failure, if any
     ],
+    "drafts": [
+        ("language", "TEXT"),            # nl | en
+        ("round", "INTEGER"),            # writer rounds used (1 + revisions)
+        ("forwardable_blurb", "TEXT"),
+        ("claims_json", "TEXT"),
+        ("hook_source_url", "TEXT"),
+        ("service_id", "TEXT"),
+        ("final_text", "TEXT"),          # what the freelancer copied (after their edits)
+        ("copied_at", "TEXT"),
+    ],
 }
 POST_MIGRATION_SQL = (
     "CREATE UNIQUE INDEX IF NOT EXISTS leads_source_posting ON leads(source_posting_id) "

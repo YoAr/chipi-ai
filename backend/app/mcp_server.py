@@ -81,8 +81,14 @@ def create_mcp(store_provider: StoreProvider) -> MCPServer:
         return store_provider().start_research(max(1, min(int(limit), 25)))
 
     @mcp.tool()
+    def write_drafts(limit: int = 10) -> dict:
+        """Start the Writer + Verifier on researched leads without a draft. Drafts land as "ready" or
+        "needs_human"; nothing is sent (the freelancer copies them). Poll get_job("drafts")."""
+        return store_provider().start_drafts(max(1, min(int(limit), 25)))
+
+    @mcp.tool()
     def get_job(key: str) -> dict:
-        """Status of a background job started from here: "scout", "panel_snapshot" or "research"."""
+        """Status of a background job started from here: "scout", "panel_snapshot", "research" or "drafts"."""
         return store_provider().job_status(key)
 
     return mcp

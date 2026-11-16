@@ -246,3 +246,5 @@ textarea { width: 100%; padding: 12px 14px; resize: vertical; line-height: 1.6; 
 /* Spec v2: lead briefs */
 .lead .brief { display: flex; flex-direction: column; gap: 6px; background: var(--bg); border-radius: var(--r-inner); padding: 12px 14px; }
 .lead .brief p { margin: 0; }
+.draft details summary { cursor: pointer; color: var(--muted); }
+.guidance { margin: 0; padding-left: 18px; }

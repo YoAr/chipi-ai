@@ -99,8 +99,12 @@ class _QueueAdapter:
     def start_research(self, limit: int) -> dict:
         return self.start_job(researcher.JOB, researcher.run_research, limit)
 
+    def start_drafts(self, limit: int) -> dict:
+        from .ai import drafts
+        return self.start_job("drafts", drafts.run_batch, limit)
+
     def job_status(self, key: str) -> dict:
-        if key not in (scout.JOB, scout.SNAPSHOT_JOB, researcher.JOB):
+        if key not in (scout.JOB, scout.SNAPSHOT_JOB, researcher.JOB, "drafts"):
             raise NotFound(f"Unknown job {key}")
         return jobs.get(self.store, key) if isinstance(self.store, RealStore) else jobs._idle()
 

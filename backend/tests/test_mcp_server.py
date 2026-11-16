@@ -69,7 +69,7 @@ def test_tools_via_fakes():
     import asyncio
 
     tools = asyncio.run(mcp.list_tools())
-    assert {t.name for t in tools} == {"ping", "get_queue", "complete_queue_item", "refresh_rate_benchmarks", "run_scout", "snapshot_panel", "research_leads", "get_job"}
+    assert {t.name for t in tools} == {"ping", "get_queue", "complete_queue_item", "refresh_rate_benchmarks", "run_scout", "snapshot_panel", "research_leads", "write_drafts", "get_job"}
 
 
 def test_end_to_end_initialize_list_and_call():
@@ -82,7 +82,7 @@ def test_end_to_end_initialize_list_and_call():
 
         res = c.post("/mcp", json=rpc("tools/list", id=2), headers=auth)
         names = {t["name"] for t in parse(res)["result"]["tools"]}
-        assert names == {"ping", "get_queue", "complete_queue_item", "refresh_rate_benchmarks", "run_scout", "snapshot_panel", "research_leads", "get_job"}
+        assert names == {"ping", "get_queue", "complete_queue_item", "refresh_rate_benchmarks", "run_scout", "snapshot_panel", "research_leads", "write_drafts", "get_job"}
 
         res = c.post("/mcp", json=rpc("tools/call", {"name": "ping", "arguments": {}}, 3), headers=auth)
         assert "pong" in json.dumps(parse(res)["result"])

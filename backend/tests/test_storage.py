@@ -156,7 +156,7 @@ def test_events_validate_type_actor_subject_payload(tmp_path, type_, actor, subj
 def test_events_all_documented_types_accepted(tmp_path):
     for t in events.EVENT_TYPES:
         events.append_event(tmp_path, t, "agent", "goal", {})
-    assert len(events.read_events(tmp_path)) == 27
+    assert len(events.read_events(tmp_path)) == 28
 
 
 def test_events_read_rejects_bad_since_and_handles_missing_file(tmp_path):
@@ -630,7 +630,7 @@ def test_approve_twice_fails_and_enqueues_once(store):
     store.approve_draft(draft["id"], "x")
     with pytest.raises(ValueError, match="only a pending draft"):
         store.approve_draft(draft["id"], "x")
-    with pytest.raises(ValueError, match="only a pending draft"):
+    with pytest.raises(ValueError, match="only an open draft"):
         store.reject_draft(draft["id"], "late")
     assert len(queue.pending(store.conn)) == 1
     with pytest.raises(ValueError):

@@ -68,13 +68,14 @@ def run(store, key: str, fn, *args) -> None:
     done(), the job is marked done here.
     """
     from .ai.client import AIUnavailable
+    from .mock_store import NotFound
 
     try:
         fn(*args)
     except NotImplementedError as exc:
         fail(store, key, f"Not built yet: {exc}")
         return
-    except (AIUnavailable, ValueError) as exc:
+    except (AIUnavailable, ValueError, NotFound) as exc:
         fail(store, key, str(exc))
         return
     except Exception as exc:  # never leave a job stuck at "running"
