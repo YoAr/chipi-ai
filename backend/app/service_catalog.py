@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from . import demand, profiles
-from .ai.offer_designer import NAME, STRENGTH_ORDER, Service
+from .ai.offer_designer import MAX_WEEKS, NAME, STRENGTH_ORDER, Service
 from .compliance import find_banned
 from .storage import versions
 from .storage.events import append_event
@@ -40,6 +40,10 @@ def edit(store, services: list[dict]) -> dict:
     out, warnings = [], []
     for raw in services:
         s = Service.model_validate(raw)
+        if not 1 <= s.duration_weeks <= MAX_WEEKS:
+            raise ValueError(f"{s.name}: enter a duration between 1 and {MAX_WEEKS} weeks")
+        if not s.rate_range_eur.min <= s.rate_range_eur.max < float("inf"):
+            raise ValueError(f"{s.name}: maximum rate must be finite and at least the minimum")
         if s.rate_range_eur.min < floor:
             raise ValueError(f"{s.name}: €{s.rate_range_eur.min:g} is below your floor of €{floor:g}/hour")
         skills = [known[k.strip().lower()]["name"] for k in s.skills_used if k.strip().lower() in known]

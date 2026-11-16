@@ -34,7 +34,7 @@ from ..storage.wiki import save_raw
 from . import client as ai
 
 JOB = "research"
-PROMPT_VERSION = "researcher-v1"
+PROMPT_VERSION = "researcher-v2"
 HOOK_MAX_AGE_DAYS = 30
 SEARCH_RESULTS = 8
 MAX_FETCHES = 5
@@ -79,7 +79,7 @@ You get: the POSTING, the freelancer's SERVICES, a few PROFILE facts, and CANDID
 Decide:
 - fit: the premise is that a company hiring for a role may buy a clearly scoped, independent project that covers part of that need NOW, while they hire. fit=true when one service could deliver a concrete, bounded piece of the work this role is being hired for (the same discipline and skills), even if the posting doesn't name the exact problem; the problem_hypothesis is where you say what that piece probably is. fit=false when the role is a different discipline than every service, is purely ongoing operational or hands-on trade work with no project-shaped part, is an internship or graduation project, or is work the freelancer excluded. Give a short, specific fit_reason either way.
 - service_id: the id of the one best service.
-- hook: ONE recent, specific company event from the candidate sources (news, blog post, launch, funding, leadership change, partnership). Copy source_url and published_at exactly from that source. If no source has a usable event, use the posting itself (type "posting") and summarise what they are hiring for. The summary must only state what the source says; keep names and numbers exactly as written.
+- hook: ONE recent, specific company event from the candidate sources (news, blog post, launch, funding, leadership change, partnership). Copy source_url and published_at exactly from that source. If no source has a usable event, use the posting itself (type "posting") and summarise what they are hiring for. Prefer a concrete event directly relevant to the proposed work. Skip generic company descriptions or roundup mentions. The summary must only state what the source says; keep names and numbers exactly as written.
 - problem_hypothesis: one or two sentences linking the posting and the hook to the chosen service. Mark it as a hypothesis ("likely", "probably"), not a fact.
 - sources: every source you relied on (url, title, published_at copied from the candidates).
 - channel, warm_connection, draft_language: fill in your best guess; code sets them."""
@@ -133,11 +133,20 @@ def _numbers(text: str) -> set[str]:
     return {n.replace(",", ".") for n in re.findall(r"\d+(?:[.,]\d+)?", text or "")}
 
 
+_EVENT_TERMS = re.compile(
+    r"nieuws|newsroom|press.release|persbericht|launch|lanceer|funding|financier|miljoen|"
+    r"partnership|samenwerking|overname|acquisition|benoem|appoint|invest", re.I
+)
+
+
 def within(date: str | None, days: int, now: datetime) -> bool:
     if not date:
         return False
-    d = datetime.strptime(date[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    return now - timedelta(days=days) <= d <= now + timedelta(days=1)
+    try:
+        published = datetime.strptime(date[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return False
+    return now.date() - timedelta(days=days) <= published <= now.date()
 
 
 def gather_sources(lead: dict, search, fetcher, now: datetime | None = None) -> tuple[list[dict], dict]:
@@ -145,33 +154,46 @@ def gather_sources(lead: dict, search, fetcher, now: datetime | None = None) -> 
     now = now or _now()
     company = lead.get("company") or ""
     key = _company_key(company)
-    year = now.year
+    year = str(now.year) if now.month != 1 else f"({now.year} OR {now.year - 1})"
     lead_hosts = {(urlsplit(u).hostname or "").lower() for u in (lead.get("url"), lead.get("apply_url")) if u}
     seen, results = set(), []
-    for q in (f'"{company}" nieuws {year}', f'"{company}" news {year}'):
+    queries = (
+        f'"{company}" (nieuws OR persbericht OR samenwerking OR financiering OR lancering) {year}',
+        f'"{company}" (news OR newsroom OR announcement OR funding OR launch OR partnership) {year}',
+    )
+    for q in queries:
         for r in search.search(q, count=SEARCH_RESULTS, locale="NL"):
             u = r.get("url", "")
             if u and u not in seen and not _skip(u, lead_hosts):
                 seen.add(u)
                 results.append(r)
-    # Prefer results that name the company in the title or snippet
-    results.sort(key=lambda r: key not in _squash(f"{r.get('title')} {r.get('snippet')}"))
+    def rank(result: dict) -> tuple[bool, bool]:
+        title_and_snippet = f"{result.get('title', '')} {result.get('snippet', '')}"
+        return key not in _squash(title_and_snippet), not _EVENT_TERMS.search(
+            f"{result['url']} {title_and_snippet}"
+        )
+
+    results.sort(key=rank)
     sources, fetched = [], 0
+    fetched_urls = set()
     for r in results[:MAX_FETCHES]:
         page = fetcher.fetch(r["url"])
         fetched += 1
-        if page.get("error") or not page.get("text"):
+        url = page.get("url") or r["url"]
+        if page.get("error") or not page.get("text") or _skip(url, lead_hosts) or url in fetched_urls:
             continue
-        if key and key not in _squash(page["text"][:TEXT_SCAN]):
+        fetched_urls.add(url)
+        if key and key not in _squash(f"{page.get('title', '')} {page['text'][:TEXT_SCAN]}"):
             continue
         if not within(page.get("published_at"), HOOK_MAX_AGE_DAYS, now):
             continue
-        sources.append({"id": f"S{len(sources) + 1}", "url": page["url"], "title": page["title"] or r.get("title", ""),
+        sources.append({"id": f"S{len(sources) + 1}", "url": url, "title": page.get("title") or r.get("title", ""),
                         "published_at": page["published_at"], "text": page["text"], "via": page["via"]})
+    sources.sort(key=lambda source: source["published_at"], reverse=True)
     posting_date = (lead.get("published_at") or "")[:10] or None
     sources.append({"id": "P", "url": lead.get("url"), "title": f"Job posting: {lead.get('title')}",
                     "published_at": posting_date, "text": lead.get("description") or "", "via": "posting"})
-    return sources, {"searches": 2, "fetches": fetched}
+    return sources, {"searches": len(queries), "fetches": fetched}
 
 
 
@@ -187,6 +209,8 @@ def brief_problems(brief: Brief, sources: list[dict], service_ids: set[str], now
             if src is None:
                 problems.append("hook.source_url must be copied exactly from one candidate source")
             else:
+                if src["via"] != "posting" and brief.hook.type == "posting":
+                    problems.append("use hook type posting only for the original job posting")
                 if not within(src["published_at"], HOOK_MAX_AGE_DAYS, now):
                     problems.append(f"the hook source is not dated within {HOOK_MAX_AGE_DAYS} days")
                 missing = _numbers(brief.hook.summary) - _numbers(src["text"])

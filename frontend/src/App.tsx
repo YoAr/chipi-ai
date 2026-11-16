@@ -13,6 +13,7 @@ import { Leads } from './screens/Leads'
 import { Drafts } from './screens/Drafts'
 import { PipelineView } from './screens/Pipeline'
 import { TrackerView } from './screens/Tracker'
+import { Insights } from './screens/Insights'
 import { MetricsView } from './screens/Metrics'
 
 // Every screen keeps its own address (#leads, #drafts, …) so links between screens and
@@ -24,6 +25,7 @@ const SECTIONS = [
   ['drafts', 'Drafts'],
   ['pipeline', 'Board'],
   ['metrics', 'Metrics'],
+  ['insights', 'Insights'],
   ['onboarding', 'Your profile'],
   ['fit', 'Fit & rate'],
   ['offers', 'Services'],
@@ -35,7 +37,7 @@ type Group = { label: string; icon: string; sections: Tab[] }
 const GROUPS: Group[] = [
   { label: 'Today', icon: 'today', sections: ['today'] },
   { label: 'Find work', icon: 'work', sections: ['leads', 'drafts'] },
-  { label: 'Status', icon: 'view_kanban', sections: ['pipeline', 'metrics'] },
+  { label: 'Status', icon: 'view_kanban', sections: ['pipeline', 'metrics', 'insights'] },
   { label: 'Profile', icon: 'person', sections: ['onboarding', 'fit', 'offers'] }, // set-up, left to right
 ]
 
@@ -111,6 +113,7 @@ export default function App() {
           {tab === 'drafts' && <Drafts go={go} />}
           {tab === 'pipeline' && (mode === 'real' ? <TrackerView go={go} /> : <PipelineView go={go} />)}
           {tab === 'metrics' && <MetricsView />}
+          {tab === 'insights' && (mode === 'real' ? <Insights /> : <MetricsView />)}
           </main>
           {chatOpen && <Chat />}
         </div>

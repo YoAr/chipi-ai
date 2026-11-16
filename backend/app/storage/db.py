@@ -142,6 +142,31 @@ CREATE TABLE IF NOT EXISTS briefs (
     created_at TEXT NOT NULL
 );
 
+-- Private, consented transcripts and their independently approved proposals.
+CREATE TABLE IF NOT EXISTS meetings (
+    id TEXT PRIMARY KEY,
+    lead_id TEXT NOT NULL,
+    held_on TEXT NOT NULL,
+    transcript TEXT NOT NULL,
+    consent_confirmed INTEGER NOT NULL CHECK (consent_confirmed = 1)
+);
+
+CREATE TABLE IF NOT EXISTS learnings (
+    id TEXT PRIMARY KEY,
+    lead_id TEXT NOT NULL,
+    meeting_id TEXT,
+    json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS learning_approvals (
+    learning_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    proposal_index INTEGER NOT NULL,
+    approved_at TEXT NOT NULL,
+    PRIMARY KEY (learning_id, kind, proposal_index)
+);
+
 -- Spec v2: versioned documents with approval state (profile, services); see versions.py
 CREATE TABLE IF NOT EXISTS doc_versions (
     name        TEXT NOT NULL,          -- profile | services

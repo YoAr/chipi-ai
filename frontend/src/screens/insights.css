@@ -1,0 +1,13 @@
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 1rem;
+}
+.metric-grid dt { text-transform: capitalize; }
+.metric-grid dd { margin: 0; font-size: 1.5rem; font-weight: 600; }
+.table-scroll { overflow-x: auto; }
+.table-scroll table { width: 100%; border-collapse: collapse; }
+.table-scroll th, .table-scroll td { padding: 0.5rem; text-align: left; }
+.service-editor { display: grid; gap: 0.75rem; }
+.service-editor label, .insight-fields label { display: grid; gap: 0.25rem; }
+.insight-fields .consent { display: flex; align-items: baseline; }

@@ -45,9 +45,7 @@ export function ProfileReview({ doc, onChange }: { doc: ProfileDoc; onChange: ()
           {isApproved ? `Approved · version ${v.version}` : `Draft · version ${v.version}`}
         </span>
       </div>
-      <p className="muted small">
-        Built only from your CV and your answers. Anything Chipi couldn’t find there was removed and is listed below.
-      </p>
+      {v.author === 'agent' && <p className="muted small">Built from your CV and interview answers.</p>}
 
       <h3>Skills and proof</h3>
       <ul className="skills">

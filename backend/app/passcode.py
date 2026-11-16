@@ -4,7 +4,7 @@ Switched on only when DEMO_PASSCODE is set (a Fly secret). Locally it is unset, 
 nothing changes. When on:
 - Every POST/PUT/PATCH/DELETE under /api/ needs the header `X-Demo-Passcode`.
   That covers uploads, verdicts, approvals, AI actions and chat (which costs money).
-- Reading (GET) stays open, so anyone with the link can look around.
+- Reading (GET) stays open except for private meeting reviews and their job status.
 - /api/reset keeps its own token; /mcp and /hooks are outside /api/ and use their own checks.
 - Wrong guesses are rate-limited per client.
 
@@ -27,6 +27,7 @@ from .config import Settings
 from .guards import client_ip
 
 HEADER = b"x-demo-passcode"
+PRIVATE_READS = {"/api/learnings", "/api/learnings/status"}
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 EXEMPT = {"/api/reset", "/api/passcode/check"}
 NEEDED = {"error": {"code": "passcode_required", "message": "This demo needs a passcode to make changes."}}
@@ -72,7 +73,7 @@ class PasscodeMiddleware:
         if (
             scope["type"] == "http"
             and self.passcode
-            and scope["method"] in WRITE_METHODS
+            and (scope["method"] in WRITE_METHODS or scope["path"] in PRIVATE_READS)
             and scope["path"].startswith("/api/")
             and scope["path"] not in EXEMPT
         ):

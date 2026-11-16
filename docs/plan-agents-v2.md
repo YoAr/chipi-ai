@@ -44,7 +44,11 @@ New or changed routes, all 202 + poll where a model is involved:
 - `POST /api/scout` · `GET /api/leads?status=` (with brief) · `POST /api/leads/{id}/research`
 - `POST /api/leads/{id}/draft` (Writer ⇄ Verifier) · `POST /api/drafts/{id}/regenerate {language}` · `POST /api/drafts/{id}/copied`
 - `POST /api/leads/{id}/status {status}` (Tracker one-click actions) · `GET /api/reminders`
-- `POST /api/meetings` (transcript + consent) · `GET /api/learnings` · `POST /api/learnings/{id}/approve`
+- `POST /api/meetings` accepts `{lead_id, held_on, transcript, consent_confirmed: true}` for a booked meeting or won lead and returns 202 `Job`.
+- `POST /api/learnings/engagement` accepts `{lead_id}` to summarize reviewed meetings at engagement close and starts a services redesign when a profile is approved. Poll both jobs with `GET /api/learnings/status`.
+- `GET /api/learnings` returns `{learnings, engagements}`. Reviews include verified evidence excerpts, provenance and approval timestamps. The demo passcode protects this route and its job status.
+- `POST /api/learnings/{id}/approve` accepts `{kind: "skill" | "service", index}` and returns `{approved_at}`. Approved skill names can be added to a profile draft. Approved service changes inform the next design draft.
+- `GET /api/insights` returns the Tracker funnel and reply counts and rates by service, channel, hook type and language. Rates use one observation per lead, attributed to its first logged send.
 - Removed: the draft approve → email send path. Rule 4 (the allowlist) stays in code, but nothing calls it.
 
 `docs/contract.md` and `fixtures/` get updated in the same commit, as CLAUDE.md requires.

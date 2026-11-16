@@ -4,9 +4,9 @@
     {
       "id": "dr_001", "lead_id": "ld_001", "nickname": "payments-api", "channel": "email",
       "to": "[HIRING MANAGER EMAIL]", "subject": "Payments API contract: Python/FastAPI, available now",
-      "body": "Hi [NAME],\n\nI saw your post about the payments API contract. I've spent 5 years building Python/FastAPI backends and recently shipped LLM agent integrations: [ONE RELEVANT PROJECT].\n\nI'm available [HOURS]/week from Boston (ET) at $120/hour. Could we do a 20-minute call this week?\n\nSam",
+      "body": "Hi [NAME],\n\nI saw your post about the payments API contract. I've spent 5 years building Python/FastAPI backends and recently shipped LLM agent integrations: [ONE RELEVANT PROJECT].\n\nI'm available [HOURS]/week from Amsterdam at €120/hour. Could we do a 20-minute call this week?\n\nSam",
       "verifier": {"passed": true, "checks": [
-        {"name": "Rate matches rate.md", "passed": true, "note": ""},
+        {"name": "Rate matches your ask", "passed": true, "note": ""},
         {"name": "Claims trace to raw/", "passed": true, "note": ""},
         {"name": "Under 150 words, one ask", "passed": true, "note": ""},
         {"name": "Channel allowed", "passed": true, "note": ""}

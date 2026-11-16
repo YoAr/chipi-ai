@@ -6,16 +6,16 @@
     {"name": "Fixed-price web projects", "level": "low", "reason": "Usually priced below the floor", "sources": ["data/benchmarks.json"]}
   ],
   "rate": {
-    "floor": 100, "ask": 120, "low": 110, "high": 140, "currency": "USD", "unit": "hour",
+    "floor": 100, "ask": 120, "low": 110, "high": 140, "currency": "EUR", "unit": "hour",
     "reasons": [
-      {"text": "Break-even against a ~$165K Boston salary is about $120–145/hour", "source": "data/benchmarks.json#salary_equivalent"},
-      {"text": "Boston agencies bill mid-level engineers $115–135/hour", "source": "data/benchmarks.json#hourly"},
-      {"text": "Arc.dev US freelancers list at $82–130/hour", "source": "data/benchmarks.json#hourly"}
+      {"text": "The sample profile sets a €100/hour floor.", "source": "fixtures/fit.json#rate"},
+      {"text": "Published Dutch ICT assignments show a €100/hour median and a €95–120/hour middle range.", "source": "data/benchmarks.json#hourly"},
+      {"text": "Published Dutch ICT project-lead assignments show a €110/hour median.", "source": "data/benchmarks.json#hourly"}
     ]
   },
   "goal_checks": [
     {"name": "Each fit has a source", "passed": true},
-    {"name": "Rate inside benchmarks and above break-even", "passed": true},
+    {"name": "Rate at the upper end of Dutch ICT benchmarks and above the sample floor", "passed": true},
     {"name": "No contradiction with persona", "passed": true}
   ]
 }

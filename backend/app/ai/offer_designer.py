@@ -173,7 +173,12 @@ def run_design(store, settings: Settings) -> dict:
     jobs.step(store, JOB, "demand", "Reading hiring demand for your skills")
     table = demand.market_table(store.conn, profile)
     bench = load_benchmarks(settings.data_dir)
+    from ..learning import approved_service_changes
+
     base = _inputs(profile, table, bench, floor)
+    changes = approved_service_changes(store)
+    if changes:
+        base += "\nUser-approved service suggestions to consider: " + json.dumps(changes, ensure_ascii=False)
     instructions = INSTRUCTIONS.format(floor=f"€{floor:g}/hour")
 
     jobs.step(store, JOB, "designing", "Designing your services")

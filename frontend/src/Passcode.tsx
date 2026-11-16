@@ -30,6 +30,7 @@ export function PasscodeGate() {
     try {
       await api.post('/api/passcode/check', { passcode: value })
       setPasscode(value)
+      window.dispatchEvent(new Event('chipi:passcode-unlocked'))
       setUnlocked(true)
       setDone(true)
       setValue('')

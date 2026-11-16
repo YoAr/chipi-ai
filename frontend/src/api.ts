@@ -20,7 +20,7 @@ const passcodeHeader = (): Record<string, string> => {
 }
 
 function withPasscode(init?: RequestInit): RequestInit | undefined {
-  if (!init?.method || init.method === 'GET') return init
+  if (!init) return init
   return { ...init, headers: { ...(init.headers as Record<string, string> | undefined), ...passcodeHeader() } }
 }
 
@@ -41,7 +41,7 @@ const json = (method: string, data: unknown): RequestInit => ({
 })
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
+  get: <T>(path: string) => request<T>(path, { method: 'GET' }),
   post: <T>(path: string, data: unknown) => request<T>(path, json('POST', data)),
   put: <T>(path: string, data: unknown) => request<T>(path, json('PUT', data)),
   upload: <T>(path: string, file: File) => {
@@ -68,7 +68,8 @@ export function useApi<T>(path: string) {
     }
   }, [path, tick])
 
-  return { data, error, reload: () => setTick((t) => t + 1) }
+  const reload = useCallback(() => setTick((t) => t + 1), [])
+  return { data, error, reload }
 }
 
 const POLL_MS = 1500
@@ -111,10 +112,10 @@ export function useJob(startPath: string, statusPath: string, onFinish?: (job: J
     }
   }, [statusPath, poll, enabled])
 
-  const start = useCallback(async (body?: unknown) => {
+  const start = useCallback(async (body?: unknown, path = startPath) => {
     setStartError(null)
     try {
-      const j = await api.post<Job>(startPath, body ?? {})
+      const j = await api.post<Job>(path, body ?? {})
       setJob(j)
       if (timer.current) window.clearTimeout(timer.current)
       timer.current = window.setTimeout(poll, j.status === 'running' ? POLL_MS : 0)

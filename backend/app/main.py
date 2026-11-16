@@ -40,6 +40,7 @@ from .routes import interview as interview_routes
 from .routes import services as services_routes
 from .routes import research as research_routes
 from .routes import tracker as tracker_routes
+from .routes import learning as learning_routes
 import threading
 from .openai_check import check_models
 from .sim_timeline import demo_timeline
@@ -204,6 +205,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(services_routes.router)
     app.include_router(research_routes.router)
     app.include_router(tracker_routes.router)
+    app.include_router(learning_routes.router)
     install_passcode(app, settings)  # no-op unless DEMO_PASSCODE is set (public deploy)
     app.add_middleware(  # added last so it runs first: CORS headers on every reply, 401s included
         CORSMiddleware,

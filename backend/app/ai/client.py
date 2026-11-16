@@ -58,6 +58,7 @@ def structured(
     input: str | list[dict[str, Any]],
     schema: type[T],
     tools: list[dict[str, Any]] | None = None,
+    store: bool | None = None,
 ) -> T:
     """One model call that must come back as `schema`. Raises AIUnavailable on any failure."""
     import openai
@@ -70,6 +71,8 @@ def structured(
     }
     if tools:
         kwargs["tools"] = tools
+    if store is not None:
+        kwargs["store"] = store
     try:
         response = get_client().responses.parse(**kwargs)
     except openai.APIError as exc:

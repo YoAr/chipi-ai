@@ -1,8 +1,8 @@
 {
   "_sample": true,
   "offers": [
-    {"id": "ai-agent-sprint", "name": "AI agent integration sprint", "pitch": "Add an AI agent to an existing SaaS product in 2 weeks.", "price": "$12,000 fixed (≈ $125/hour)", "evidence": "[N] posts this month mention agents or LLM features", "fit": "Strongest recent work"},
-    {"id": "fastapi-rescue", "name": "FastAPI backend rescue", "pitch": "Audit and fix a slow or flaky Python API in 1 week.", "price": "$6,000 fixed", "evidence": "[N] posts mention FastAPI or API performance", "fit": "5 years of Python backends"},
-    {"id": "fractional-lead", "name": "Fractional backend lead", "pitch": "10 hours a week for an early-stage startup.", "price": "$5,000 / month", "evidence": "[N] posts for part-time senior backend", "fit": "Matches available hours"}
+    {"id": "ai-agent-sprint", "name": "AI agent integration sprint", "pitch": "Add an AI agent to an existing SaaS product in 2 weeks.", "price": "€12,000 fixed (≈ €125/hour)", "evidence": "[N] posts this month mention agents or LLM features", "fit": "Strongest recent work"},
+    {"id": "fastapi-rescue", "name": "FastAPI backend rescue", "pitch": "Audit and fix a slow or flaky Python API in 1 week.", "price": "€6,000 fixed", "evidence": "[N] posts mention FastAPI or API performance", "fit": "5 years of Python backends"},
+    {"id": "fractional-lead", "name": "Fractional backend lead", "pitch": "10 hours a week for an early-stage startup.", "price": "€5,000 / month", "evidence": "[N] posts for part-time senior backend", "fit": "Matches available hours"}
   ]
 }
