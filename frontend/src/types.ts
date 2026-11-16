@@ -74,8 +74,11 @@ export type Draft = {
   subject: string
   body: string
   verifier: { passed: boolean; checks: Check[] }
-  status: string
+  status: 'pending' | 'approved' | 'sent' | 'rejected'
   created_at: string
+  approved_at?: string
+  sent_at?: string
+  reject_note?: string
 }
 
 export type Pipeline = {

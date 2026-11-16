@@ -19,7 +19,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import REPO_ROOT, Settings, load_settings
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 
 from .ai.client import AIUnavailable
 from .cv import extract_text
@@ -30,7 +29,6 @@ from .routes import search as search_routes
 from .guards import GuardError, RateLimiter, client_ip, require_token
 from .mcp_server import create_mcp, mount_mcp
 from .passcode import install as install_passcode
-from .metrics import compute_metrics
 from .mock_store import MockStore, NotFound
 from .openai_check import STATUS as OPENAI_STATUS
 from .openai_check import check_models
@@ -38,15 +36,10 @@ from .sim_timeline import demo_timeline
 from .sim_timeline import ready as sim_ready
 from .storage import RealStore
 from .storage import queue as work_queue
-from .storage.events import read_events
+from .storage.learning import live_metrics
 from .storage.wiki import save_raw
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-
-
-def _iso_week(now: datetime) -> str:
-    year, week, _ = now.isocalendar()
-    return f"{year}-W{week:02d}"
 
 
 class _QueueAdapter:
@@ -96,6 +89,15 @@ class ApproveIn(BaseModel):
 
 class RejectIn(BaseModel):
     note: str = ""
+
+
+class ReplyIn(BaseModel):
+    note: str | None = Field(default=None, max_length=500)
+
+
+class WonIn(BaseModel):
+    amount: float | None = Field(default=None, ge=0, le=10_000_000)  # contract value, USD
+    note: str | None = Field(default=None, max_length=500)
 
 
 class ChatMessage(BaseModel):
@@ -243,7 +245,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return timeline
         if settings.mock_mode:
             return store.get("metrics")
-        return compute_metrics(read_events(settings.data_dir), _iso_week(datetime.now(timezone.utc)))
+        # Live events read the way metrics reads the simulation (approve + send folded into one send)
+        return live_metrics(settings.data_dir)
 
     # Write routes ----------------------------------------------------------
     @app.post("/api/leads/{lead_id}/verdict")
@@ -279,6 +282,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/drafts/{draft_id}/reject")
     def reject(draft_id: str, body: RejectIn) -> dict:
         return store.reject_draft(draft_id, body.note)
+
+    # After approval. Plain def: the Learner write-back runs in the thread pool.
+    @app.post("/api/drafts/{draft_id}/sent")
+    def mark_sent(draft_id: str) -> dict:
+        return store.mark_sent(draft_id)  # 422 "blocked" unless approved
+
+    @app.post("/api/leads/{lead_id}/replied")
+    def mark_replied(lead_id: str, body: ReplyIn | None = None) -> dict:
+        return store.mark_replied(lead_id, body.note if body else None)
+
+    @app.post("/api/leads/{lead_id}/won")
+    def mark_won(lead_id: str, body: WonIn | None = None) -> dict:
+        body = body or WonIn()
+        return store.mark_won(lead_id, body.amount, body.note)
 
     @app.post("/api/reset", dependencies=[Depends(token_required)])
     def reset() -> dict:

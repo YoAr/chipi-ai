@@ -90,3 +90,11 @@ def test_rate_limiter():
     assert rl.check("b")
     t[0] = 10.0
     assert rl.check("a")
+
+
+def test_rate_floor_reads_the_real_goal_file():
+    # The fixed-core comment also says "the DERIVED line"; the split must use the marker itself.
+    from app.config import REPO_ROOT
+    from app.guards import parse_rate_floor
+
+    assert parse_rate_floor((REPO_ROOT / "data" / "goal.md").read_text()) > 0

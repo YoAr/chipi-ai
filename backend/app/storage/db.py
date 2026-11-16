@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS leads (
     status       TEXT NOT NULL DEFAULT 'new',
     found_at     TEXT,
     dedup_key    TEXT UNIQUE,
-    verdict_note TEXT
+    verdict_note TEXT,
+    description  TEXT
 );
 CREATE INDEX IF NOT EXISTS leads_status ON leads(status);
 
@@ -122,4 +123,8 @@ def init_schema(conn: sqlite3.Connection) -> None:
     """Create every table if missing. Safe to run on every start."""
     with WRITE_LOCK:
         conn.executescript(SCHEMA)
+        # Databases made before the post text was kept (the live volume) get the column added
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(leads)")}
+        if "description" not in cols:
+            conn.execute("ALTER TABLE leads ADD COLUMN description TEXT")
         conn.commit()

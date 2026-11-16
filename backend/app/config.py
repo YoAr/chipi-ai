@@ -26,6 +26,7 @@ class Settings:
     model_fast: str = ""
     # Demo passcode for changes (set on the public deploy only; empty = no passcode)
     demo_passcode: str = ""
+    email_allowlist: tuple[str, ...] = ()
 
 
 def load_settings() -> Settings:
@@ -45,4 +46,5 @@ def load_settings() -> Settings:
         model_check=os.getenv("OPENAI_MODEL_CHECK", "").strip(),
         model_fast=os.getenv("OPENAI_MODEL_FAST", "").strip(),
         demo_passcode=os.getenv("DEMO_PASSCODE", "").strip(),
+        email_allowlist=tuple(a.strip() for a in os.getenv("EMAIL_ALLOWLIST", "").split(",") if a.strip()),
     )

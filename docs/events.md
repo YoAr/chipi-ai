@@ -20,7 +20,7 @@ It is the raw truth that lessons and metrics are computed from.
 ## Types
 
 **From the user:** `lead_verdict` · `draft_edited` · `draft_approved` ·
-`draft_rejected` · `rate_decision` · `steering_note` · `seed_added` ·
+`draft_rejected` · `draft_sent` · `rate_decision` · `steering_note` · `seed_added` ·
 `goal_core_edited` · `persona_updated`
 
 **From the world:** `reply_received` · `no_reply_timeout` · `call_booked` ·
@@ -33,6 +33,7 @@ It is the raw truth that lessons and metrics are computed from.
 
 | Event | Instantly (code) | Queued (model work, via the routine) |
 |---|---|---|
+| `draft_sent` | Finish the send queue item, lead → sent, Learner write-back | — |
 | `reply_received` | Attach to lead, move in pipeline | Triage → draft response (urgent) |
 | `draft_edited` | Save version | Voice update after 3 edits; A/B the new template |
 | `seed_added` | Fetch the post | Score it now |

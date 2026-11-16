@@ -20,7 +20,7 @@ except ImportError:  # pragma: no cover - Windows
 EVENTS_FILENAME = "events.jsonl"
 
 USER_TYPES = (
-    "lead_verdict", "draft_edited", "draft_approved", "draft_rejected", "rate_decision",
+    "lead_verdict", "draft_edited", "draft_approved", "draft_rejected", "draft_sent", "rate_decision",
     "steering_note", "seed_added", "goal_core_edited", "persona_updated",
 )
 WORLD_TYPES = (

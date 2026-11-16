@@ -3,11 +3,16 @@
 Differences from mock mode, on purpose:
 - approve_draft only approves: status "approved" + approved_at, and a queue item
   kind="send" ref=<draft id>. Sending happens on the send path, never here.
+- The send path is mark_sent (the user sends it themselves; there is no email sending):
+  refused unless approved, finishes the queue item, appends `draft_sent`. Then
+  mark_replied / mark_won record the outcome. Each of these reruns the Learner write-back
+  (storage/learning.py).
 - Only a "pending" draft can be approved or rejected (ValueError otherwise).
 - Every user-facing write appends the matching event from docs/events.md.
 """
 
 import json
+import logging
 import re
 import secrets
 import shutil
@@ -16,8 +21,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+from .. import guards
 from ..mock_store import PERSONA_FIELDS, NotFound
-from . import db, events, queue, seed, wiki
+from . import db, events, learning, queue, seed, wiki
+
+log = logging.getLogger("chipi.store")
 
 DOC_NAMES = ("persona", "fit", "offers", "metrics")
 LEAD_STATUSES = ("new", "useful", "maybe", "skip", "drafted", "sent", "replied", "won", "lost")
@@ -321,6 +329,10 @@ class RealStore:
             lead["verdict_note"] = row["verdict_note"]
         return lead
 
+    def lead_post(self, lead_id: str) -> str:
+        """The post's own text (kept for the draft writer; left out of /api/leads to keep it small)."""
+        return self._lead_row(lead_id)["description"] or ""
+
     def _lead_row(self, lead_id: str) -> sqlite3.Row:
         row = self.conn.execute("SELECT * FROM leads WHERE id = ?", (lead_id,)).fetchone()
         if row is None:
@@ -407,8 +419,8 @@ class RealStore:
                 score = item.get("score")
                 self.conn.execute(
                     "INSERT INTO leads (id, nickname, title, company, source, url, fetched, rate_text, score, "
-                    "why, status, found_at, dedup_key, verdict_note) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "why, status, found_at, dedup_key, verdict_note, description) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         lead_id,
                         self._unique_nickname(item.get("nickname") or item.get("title") or "lead"),
@@ -416,6 +428,7 @@ class RealStore:
                         1 if item.get("fetched") else 0, item.get("rate_text"),
                         None if score is None else int(score),
                         item.get("why"), status, item.get("found_at") or _now(), key, item.get("verdict_note"),
+                        (item.get("description") or "")[:4000] or None,
                     ),
                 )
                 inserted_ids.append(lead_id)
@@ -506,14 +519,131 @@ class RealStore:
                 (final_text, _now(), draft_id),
             )
             queue_id = queue.enqueue_unlocked(self.conn, "send", draft_id)
+            lead_key = self._metric_lead(row)
         subject = self._subject(row)
         if final_text != row["body"]:
             self._event("draft_edited", "user", subject, {
                 "draft_id": draft_id, "before": row["body"], "after": final_text,
                 "template": row["template_version"],
             })
-        self._event("draft_approved", "user", subject, {"draft_id": draft_id, "queue_id": queue_id})
+        # No "channel" here on purpose: approving isn't sending, so metrics don't count it as a send.
+        # "lead" lets the guardrails match the later draft_sent and spot a second approval for one lead.
+        self._event("draft_approved", "user", subject, {
+            "draft_id": draft_id, "queue_id": queue_id, "lead_id": row["lead_id"], "lead": lead_key,
+            "template": row["template_version"],
+        })
         return self._draft_out(self._draft_row(draft_id))
+
+    # After approval: sent, replied, won -------------------------------------
+    def _metric_lead(self, draft: sqlite3.Row) -> str:
+        """The `lead` key metrics match sends and replies on: the lead's nickname, else the draft's."""
+        if draft["lead_id"]:
+            row = self.conn.execute("SELECT nickname FROM leads WHERE id = ?", (draft["lead_id"],)).fetchone()
+            if row and row["nickname"]:
+                return row["nickname"]
+        return draft["nickname"] or f"draft:{draft['id']}"
+
+    def _metric_channel(self, draft: sqlite3.Row) -> str:
+        source = None
+        if draft["lead_id"]:
+            row = self.conn.execute("SELECT source FROM leads WHERE id = ?", (draft["lead_id"],)).fetchone()
+            source = row["source"] if row else None
+        return learning.metric_channel(source, draft["channel"])
+
+    def _learn(self) -> None:
+        """Recompute lessons and rewrite wiki/learning.md + goal.md's live block. Never fails the click."""
+        try:
+            learning.write_back(self.data_dir)
+        except Exception:  # noqa: BLE001 - the user's action already succeeded; log and move on
+            log.exception("Learner write-back failed")
+
+    def mark_sent(self, draft_id: str) -> dict:
+        """The user sent an approved draft themselves. Refused (GuardError) unless approved.
+
+        Sets status "sent" + sent_at, finishes its "send" queue item, moves the lead to "sent"
+        and appends `draft_sent`. Marking an already-sent draft again changes nothing.
+        """
+        with db.WRITE_LOCK, self.conn:
+            row = self._draft_row(draft_id)
+            if row["status"] == "sent":
+                return self._draft_out(row)
+            guards.check_send_allowed(self._draft_out(row))  # product rule 1: nothing goes out unapproved
+            self.conn.execute("UPDATE drafts SET status = 'sent', sent_at = ? WHERE id = ?", (_now(), draft_id))
+            queue_id = queue.finish_for_ref_unlocked(self.conn, "send", draft_id)
+            if row["lead_id"]:
+                self.conn.execute(
+                    "UPDATE leads SET status = 'sent' WHERE id = ? AND status IN ('new', 'useful', 'maybe', 'drafted')",
+                    (row["lead_id"],),
+                )
+            payload = {
+                "draft_id": draft_id, "queue_id": queue_id, "lead_id": row["lead_id"],
+                "lead": self._metric_lead(row), "channel": self._metric_channel(row),
+                "via": row["channel"], "template": row["template_version"],
+            }
+        self._event("draft_sent", "user", self._subject(row), payload)
+        self._learn()
+        return self._draft_out(self._draft_row(draft_id))
+
+    def _sent_draft_for(self, lead_id: str) -> sqlite3.Row:
+        row = self.conn.execute(
+            "SELECT * FROM drafts WHERE lead_id = ? AND status = 'sent' ORDER BY sent_at DESC, id LIMIT 1",
+            (lead_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Nothing has been sent to this lead yet; mark the message sent first")
+        return row
+
+    def _outcome_payload(self, lead: sqlite3.Row, draft: sqlite3.Row, note: str | None) -> dict:
+        payload = {
+            "lead": self._metric_lead(draft), "lead_id": lead["id"], "draft_id": draft["id"],
+            "channel": self._metric_channel(draft), "reported_by": "user",
+        }
+        if note:
+            payload["note"] = note
+        return payload
+
+    def mark_replied(self, lead_id: str, note: str | None = None) -> dict:
+        """They replied: lead -> "replied" and a `reply_received` event. Once per lead."""
+        with db.WRITE_LOCK, self.conn:
+            lead = self._lead_row(lead_id)
+            if lead["status"] in ("replied", "won"):
+                return self._lead_out(lead)
+            draft = self._sent_draft_for(lead_id)
+            self.conn.execute("UPDATE leads SET status = 'replied' WHERE id = ?", (lead_id,))
+            payload = self._outcome_payload(lead, draft, note)
+        self._event("reply_received", "world", f"lead:{lead['nickname']}", payload)
+        self._learn()
+        return self._lead_out(self._lead_row(lead_id))
+
+    def mark_won(self, lead_id: str, amount: float | None = None, note: str | None = None) -> dict:
+        """They hired you: lead -> "won" and a `contract_won` event. Once per lead.
+
+        A win implies a reply, so a lead won straight from "sent" also gets its `reply_received`.
+        """
+        if amount is not None and amount < 0:
+            raise ValueError("amount can't be negative")
+        with db.WRITE_LOCK, self.conn:
+            lead = self._lead_row(lead_id)
+            if lead["status"] == "won":
+                return self._lead_out(lead)
+            draft = self._sent_draft_for(lead_id)
+            had_reply = lead["status"] == "replied"
+            self.conn.execute("UPDATE leads SET status = 'won' WHERE id = ?", (lead_id,))
+            base = self._outcome_payload(lead, draft, None)
+        subject = f"lead:{lead['nickname']}"
+        if not had_reply:
+            self._event("reply_received", "world", subject, {**base, "implied_by": "contract_won"})
+        won = dict(base)
+        if amount is not None:
+            won["amount"] = amount
+        goal = self._doc("persona").get("income_goal_monthly")  # metrics: income = sum(amount) / goal
+        if goal:
+            won["goal"] = goal
+        if note:
+            won["note"] = note
+        self._event("contract_won", "world", subject, won)
+        self._learn()
+        return self._lead_out(self._lead_row(lead_id))
 
     def reject_draft(self, draft_id: str, note: str) -> dict:
         with db.WRITE_LOCK, self.conn:

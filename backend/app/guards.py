@@ -16,7 +16,9 @@ class GuardError(Exception):
     """A product rule would be broken."""
 
 
-_DERIVED_RE = re.compile(r"<!--[^>]*DERIVED", re.IGNORECASE)
+# The marker comment *starts* with DERIVED ("<!-- ──── DERIVED: …"); the fixed-core comment above
+# it also mentions "the DERIVED line", so match the start only.
+_DERIVED_RE = re.compile(r"<!--[\s\u2500-]*DERIVED", re.IGNORECASE)
 _FLOOR_RE = re.compile(r"Rate floor:\s*\$\s*(\d+)\s*/\s*hour", re.IGNORECASE)
 
 
