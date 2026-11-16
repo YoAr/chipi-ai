@@ -1,18 +1,134 @@
 {
-  "_about": "Freelance software engineer rate benchmarks, ~5 years experience, Boston / US. Collected 2026-11-15 from public sources; several are vendor estimates. Ranges in USD per hour unless noted.",
+  "_about": "Dutch freelance (zzp) hourly rates, EUR excl. VAT, published on assignments and collected by ZZPdock (CC BY 4.0). low/high = middle half (P25-P75); typical = middle value; n = assignments with a published rate. Each entry cites the raw/ extract it came from.",
+  "market": "NL",
+  "currency": "EUR",
+  "unit": "hour",
+  "updated_at": "2026-11-15T23:54:34Z",
   "hourly": [
-    {"source": "Upwork (US, experienced)", "low": 50, "high": 100, "kind": "marketplace", "confidence": "medium"},
-    {"source": "Freelancer.com (US average)", "low": 47, "high": 80, "kind": "marketplace", "confidence": "low"},
-    {"source": "Toptal (vendor estimate)", "low": 70, "high": 200, "kind": "vetted_network", "confidence": "low"},
-    {"source": "Arc.dev (US & Canada)", "low": 82, "high": 130, "kind": "vetted_network", "confidence": "medium"},
-    {"source": "US mid-level freelance, 3–6 yrs (vendor)", "low": 85, "high": 135, "kind": "survey", "confidence": "low"},
-    {"source": "Boston contract W-2 pay (job postings)", "low": 60, "high": 90, "kind": "contract_pay", "confidence": "medium"},
-    {"source": "Boston agency bill rate, mid-level (KORE1)", "low": 115, "high": 135, "median": 128, "kind": "bill_rate", "confidence": "medium"}
-  ],
-  "salary_equivalent": {
-    "boston_total_comp_5yrs": {"low": 145000, "high": 185000},
-    "billable_hours_per_year": {"low": 1400, "high": 1600},
-    "freelance_multiplier": {"low": 1.25, "high": 1.4},
-    "break_even_hourly": {"low": 120, "high": 145}
-  }
+    {
+      "source": "ZZPdock, ZZP-tarief ICT",
+      "vakgebied": "ict",
+      "url": "https://zzpdock.nl/marktdata/tarieven/ict",
+      "kind": "published_assignment_rates",
+      "currency": "EUR",
+      "unit": "hour",
+      "vat": "excluded",
+      "typical": 100,
+      "low": 95,
+      "high": 120,
+      "n": 222,
+      "roles": [
+        {
+          "role": "Projectleider",
+          "n": 186,
+          "low": 100,
+          "typical": 110,
+          "high": 120
+        },
+        {
+          "role": "Specialist",
+          "n": 80,
+          "low": 90,
+          "typical": 95,
+          "high": 105
+        },
+        {
+          "role": "Adviseur",
+          "n": 79,
+          "low": 95,
+          "typical": 105,
+          "high": 115
+        },
+        {
+          "role": "Projectmanager",
+          "n": 65,
+          "low": 103,
+          "typical": 118,
+          "high": 128
+        },
+        {
+          "role": "Engineer",
+          "n": 58,
+          "low": 80,
+          "typical": 100,
+          "high": 107
+        },
+        {
+          "role": "Consultant",
+          "n": 53,
+          "low": 95,
+          "typical": 107,
+          "high": 113
+        },
+        {
+          "role": "Architect",
+          "n": 51,
+          "low": 104,
+          "typical": 115,
+          "high": 120
+        },
+        {
+          "role": "Product Owner",
+          "n": 43,
+          "low": 100,
+          "typical": 110,
+          "high": 115
+        },
+        {
+          "role": "Manager",
+          "n": 42,
+          "low": 100,
+          "typical": 110,
+          "high": 130
+        },
+        {
+          "role": "Solution Architect",
+          "n": 41,
+          "low": 110,
+          "typical": 125,
+          "high": 126
+        },
+        {
+          "role": "Functioneel Beheerder",
+          "n": 34,
+          "low": 85,
+          "typical": 95,
+          "high": 114
+        },
+        {
+          "role": "Medewerker",
+          "n": 33,
+          "low": 65,
+          "typical": 74,
+          "high": 85
+        },
+        {
+          "role": "Developer",
+          "n": 29,
+          "low": 88,
+          "typical": 95,
+          "high": 120
+        },
+        {
+          "role": "Coördinator",
+          "n": 28,
+          "low": 70,
+          "typical": 102,
+          "high": 120
+        },
+        {
+          "role": "Programmamanager",
+          "n": 27,
+          "low": 100,
+          "typical": 110,
+          "high": 135
+        }
+      ],
+      "date_modified": "2026-11-15T17:15:27.309Z",
+      "accessed_at": "2026-11-15",
+      "licence": "CC BY 4.0",
+      "attribution": "ZZPdock, ZZP-tarief ICT. Geraadpleegd op 2026-11-15. Beschikbaar op https://zzpdock.nl/marktdata/tarieven/ict (CC BY 4.0). Figures extracted unchanged.",
+      "raw": "raw/2026-11-15-zzpdock-ict.json"
+    }
+  ]
 }

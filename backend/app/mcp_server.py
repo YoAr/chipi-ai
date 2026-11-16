@@ -51,6 +51,15 @@ def create_mcp(store_provider: StoreProvider) -> MCPServer:
         store_provider().complete(id, ok, error)
         return {"ok": True, "id": id}
 
+    @mcp.tool()
+    def refresh_rate_benchmarks() -> dict:
+        """Refresh Dutch freelance rate benchmarks (EUR/hour) from ZZPdock market data.
+
+        Saves each extract in raw/ and rewrites benchmarks.json. Returns which vakgebieden
+        were updated and which failed (the old figures are kept for those). Run daily.
+        """
+        return store_provider().refresh_rates()
+
     return mcp
 
 

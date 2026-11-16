@@ -33,6 +33,7 @@ from .passcode import install as install_passcode
 from .metrics import compute_metrics
 from .mock_store import MockStore, NotFound
 from .openai_check import STATUS as OPENAI_STATUS
+from .rates import refresh_benchmarks
 from .openai_check import check_models
 from .simulate import simulate
 from .storage import RealStore
@@ -65,6 +66,11 @@ class _QueueAdapter:
         if not isinstance(self.store, RealStore):
             raise NotFound("Mock mode has no work queue")
         return work_queue.complete(self.store.conn, id, ok, error)
+
+    def refresh_rates(self) -> dict:
+        if not isinstance(self.store, RealStore):
+            raise NotFound("Mock mode serves fixed sample rates")
+        return refresh_benchmarks(self.store.data_dir)
 
 
 # Request bodies (shapes from docs/contract.md) ------------------------------
