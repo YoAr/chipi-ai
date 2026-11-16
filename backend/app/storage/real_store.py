@@ -195,8 +195,14 @@ class RealStore:
         bits.append(persona.get("location") or "")
         q = lambda sql, *a: self.conn.execute(sql, a).fetchone()[0]  # noqa: E731
         week_ahead = (datetime.now(timezone.utc) + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        headline = " · ".join(b for b in bits if b)
+        if not headline:  # spec v2: the approved profile has skills, not a role line
+            from ..profiles import approved_profile  # lazy: profiles imports this package
+
+            approved = approved_profile(self) or {}
+            headline = " · ".join(s["name"] for s in approved.get("skills", [])[:3])
         return {
-            "profile": {"name": persona.get("name") or "", "headline": " · ".join(b for b in bits if b)},
+            "profile": {"name": persona.get("name") or "", "headline": headline},
             "today": {
                 "new_leads": q("SELECT COUNT(*) FROM leads WHERE status = 'new'"),
                 "drafts_pending": q("SELECT COUNT(*) FROM drafts WHERE status = 'pending'"),
@@ -365,7 +371,9 @@ class RealStore:
         lead's relevance as its score. Leads whose research failed before go last."""
         from ..relevance import rank  # lazy: keeps storage free of product logic imports at load
 
-        rows = self.conn.execute("SELECT * FROM leads WHERE status = 'filtered'").fetchall()
+        rows = self.conn.execute(
+            "SELECT * FROM leads WHERE status = 'filtered' AND COALESCE(company_slug, lower(company)) NOT IN "
+            "(SELECT COALESCE(company_slug, lower(company)) FROM leads WHERE status = 'not_interested')").fetchall()
         leads = [self._lead_out(r) | {"_failed": bool(r["research_error"])} for r in rows]
         ranked = rank(leads, services or []) if services else [(l, l.get("score") or 0, None) for l in leads]
         with db.WRITE_LOCK, self.conn:
@@ -505,7 +513,7 @@ class RealStore:
             "status": row["status"], "created_at": row["created_at"],
         }
         for extra in ("approved_at", "sent_at", "reject_note", "language", "round", "forwardable_blurb",
-                      "hook_source_url", "service_id", "final_text", "copied_at"):
+                      "hook_source_url", "service_id", "final_text", "copied_at", "kind"):
             if row[extra] is not None:
                 draft[extra] = row[extra]
         if row["claims_json"]:
@@ -574,18 +582,21 @@ class RealStore:
         draft_id = _new_id("dr")
         with db.WRITE_LOCK, self.conn:
             lead = self._lead_row(d["lead_id"])
+            kind = d.get("kind") or "initial"
             self.conn.execute("UPDATE drafts SET status = 'superseded' WHERE lead_id = ? AND language = ? "
-                              "AND status IN ('ready', 'needs_human')", (d["lead_id"], d["language"]))
+                              "AND COALESCE(kind, 'initial') = ? AND status IN ('ready', 'needs_human')",
+                              (d["lead_id"], d["language"], kind))
             self.conn.execute(
                 "INSERT INTO drafts (id, lead_id, nickname, channel, to_addr, subject, body, template_version, "
                 "verifier_json, status, created_at, language, round, forwardable_blurb, claims_json, "
-                "hook_source_url, service_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "hook_source_url, service_id, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (draft_id, d["lead_id"], lead["nickname"], d["channel"], lead["apply_url"] or lead["url"],
                  d.get("subject"), d["body"], d.get("template_version"), json.dumps(d["verifier"], ensure_ascii=False),
                  d["status"], _now(), d["language"], d["round"], d.get("forwardable_blurb"),
-                 json.dumps(d.get("claims_used") or [], ensure_ascii=False), d.get("hook_source_url"), d.get("service_id")),
+                 json.dumps(d.get("claims_used") or [], ensure_ascii=False), d.get("hook_source_url"), d.get("service_id"),
+                 kind),
             )
-            if lead["status"] in ("researched", "drafted", "verified", "ready"):
+            if kind == "initial" and lead["status"] in ("researched", "drafted", "verified", "ready"):
                 self.conn.execute("UPDATE leads SET status = ? WHERE id = ?",
                                   ("ready" if d["status"] == "ready" else "drafted", d["lead_id"]))
             row = self._draft_row(draft_id)
@@ -623,7 +634,8 @@ class RealStore:
 
     def leads_to_draft(self, limit: int) -> list[dict]:
         rows = self.conn.execute(
-            "SELECT l.id FROM leads l WHERE l.status = 'researched' AND NOT EXISTS "
+            "SELECT l.id FROM leads l WHERE l.status = 'researched' AND COALESCE(l.company_slug, lower(l.company)) "
+            "NOT IN (SELECT COALESCE(company_slug, lower(company)) FROM leads WHERE status = 'not_interested') AND NOT EXISTS "
             "(SELECT 1 FROM drafts d WHERE d.lead_id = l.id AND d.status != 'superseded') "
             "ORDER BY l.score DESC, l.published_at DESC LIMIT ?", (int(limit),)).fetchall()
         return [self.lead(r["id"]) for r in rows]

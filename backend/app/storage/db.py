@@ -182,6 +182,7 @@ MIGRATIONS = {
         ("service_id", "TEXT"),
         ("final_text", "TEXT"),          # what the freelancer copied (after their edits)
         ("copied_at", "TEXT"),
+        ("kind", "TEXT"),                # initial | followup (spec v2 Tracker: max one follow-up)
     ],
 }
 POST_MIGRATION_SQL = (

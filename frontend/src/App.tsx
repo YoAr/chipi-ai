@@ -12,6 +12,7 @@ import { Services } from './screens/Services'
 import { Leads } from './screens/Leads'
 import { Drafts } from './screens/Drafts'
 import { PipelineView } from './screens/Pipeline'
+import { TrackerView } from './screens/Tracker'
 import { MetricsView } from './screens/Metrics'
 
 const TABS = [
@@ -77,7 +78,7 @@ export default function App() {
           {tab === 'offers' && (mode === 'real' ? <Services go={go} /> : <Offers go={go} />)}
           {tab === 'leads' && <Leads go={go} />}
           {tab === 'drafts' && <Drafts go={go} />}
-          {tab === 'pipeline' && <PipelineView />}
+          {tab === 'pipeline' && (mode === 'real' ? <TrackerView go={go} /> : <PipelineView />)}
           {tab === 'metrics' && <MetricsView />}
         </main>
         {chatOpen && <Chat />}

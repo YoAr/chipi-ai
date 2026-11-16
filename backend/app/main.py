@@ -41,6 +41,7 @@ from .routes import scout as scout_routes
 from .routes import interview as interview_routes
 from .routes import services as services_routes
 from .routes import research as research_routes
+from .routes import tracker as tracker_routes
 import threading
 from .openai_check import check_models
 from .simulate import simulate
@@ -98,6 +99,18 @@ class _QueueAdapter:
 
     def start_research(self, limit: int) -> dict:
         return self.start_job(researcher.JOB, researcher.run_research, limit)
+
+    def reminders(self) -> list[dict]:
+        from . import tracker
+        if not isinstance(self.store, RealStore):
+            return []
+        return tracker.reminders(self.store)
+
+    def funnel(self) -> dict:
+        from . import tracker
+        if not isinstance(self.store, RealStore):
+            raise NotFound("Not available with sample data (MOCK_MODE=1)")
+        return tracker.funnel(self.store)
 
     def start_drafts(self, limit: int) -> dict:
         from .ai import drafts
@@ -188,6 +201,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(interview_routes.router)
     app.include_router(services_routes.router)
     app.include_router(research_routes.router)
+    app.include_router(tracker_routes.router)
     install_passcode(app, settings)  # no-op unless DEMO_PASSCODE is set (public deploy)
     app.add_middleware(  # added last so it runs first: CORS headers on every reply, 401s included
         CORSMiddleware,

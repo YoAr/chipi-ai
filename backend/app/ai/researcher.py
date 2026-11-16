@@ -215,10 +215,14 @@ def _inputs(lead: dict, services: list[dict], profile: dict, sources: list[dict]
 def research_lead(store, settings: Settings, lead: dict, *, search=None, fetcher=None, now=None) -> dict:
     """Research one lead. Returns {"status": researched|dropped|failed, ...}; saves the brief."""
     now = now or _now()
+    from .. import tracker
+
     profile = profiles.approved_profile(store)
     services = service_catalog.approved_services(store)
     if not profile or not services:
         raise ValueError("Approve your profile and services first")
+    if tracker.is_stopped(store, lead):
+        raise ValueError(f"{lead.get('company')} said they're not interested")
     search = search or search_provider(settings)
     fetcher = fetcher or PageFetcher(settings.oxylabs_key)
     sources, cost = gather_sources(lead, search, fetcher, now)

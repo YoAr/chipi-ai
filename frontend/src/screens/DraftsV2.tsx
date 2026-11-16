@@ -3,6 +3,7 @@ import { api, useApi, useJob } from '../api'
 import type { Tab } from '../App'
 import type { Draft, Lead } from '../types'
 import { Checks, Empty, JobStatus, Loading, Page } from '../ui'
+import { StatusButtons } from './Tracker'
 
 const CHANNEL: Record<string, string> = {
   apply_interim: 'Paste into the application form',
@@ -45,7 +46,7 @@ function DraftCard({ draft, lead, onChange }: { draft: Draft; lead?: Lead; onCha
         <div>
           <b>{lead?.title ?? draft.nickname}</b>
           <p className="muted small">
-            {lead?.company} · {CHANNEL[draft.channel] ?? draft.channel} · {draft.language === 'nl' ? 'Dutch' : 'English'}
+            {lead?.company} · {draft.kind === 'followup' ? 'Follow-up · ' : ''}{CHANNEL[draft.channel] ?? draft.channel} · {draft.language === 'nl' ? 'Dutch' : 'English'}
           </p>
         </div>
         <span className={draft.status === 'ready' ? 'badge badge-ok' : 'badge'}>
@@ -72,6 +73,9 @@ function DraftCard({ draft, lead, onChange }: { draft: Draft; lead?: Lead; onCha
         </button>
       </div>
       {msg && <p className="small" role="status">{msg}</p>}
+      {draft.status === 'copied' && lead && (lead.status === 'copied' || lead.status === 'ready') && (
+        <StatusButtons lead={lead} onChange={onChange} />
+      )}
       <JobStatus job={rewrite.job} startError={rewrite.startError} />
       <details>
         <summary className="small">Checked before you saw it{v.rounds ? ` · ${v.rounds} round${v.rounds > 1 ? 's' : ''}` : ''}</summary>
@@ -92,8 +96,12 @@ export function DraftsV2({ go }: { go: (t: Tab) => void }) {
   const batch = useJob('/api/drafts/write', '/api/drafts/write/status', () => drafts.reload())
   if (!drafts.data) return <Loading error={drafts.error} />
   const byLead = Object.fromEntries((leads.data?.leads ?? []).map((l) => [l.id, l]))
+  // A copied draft stays in "To copy" until its lead is logged as sent, so "I sent it" is right there
+  const notSentYet = (d: Draft) => ['copied', 'ready', 'drafted'].includes(byLead[d.lead_id]?.status ?? '')
   const shown = drafts.data.drafts.filter((d) =>
-    filter === 'open' ? d.status === 'ready' || d.status === 'needs_human' : d.status === 'copied')
+    filter === 'open'
+      ? d.status === 'ready' || d.status === 'needs_human' || (d.status === 'copied' && d.kind !== 'followup' && notSentYet(d))
+      : d.status === 'copied')
 
   return (
     <Page title="Drafts" lede="Short, checked messages you copy and send yourself. Chipi never sends anything.">
@@ -116,7 +124,8 @@ export function DraftsV2({ go }: { go: (t: Tab) => void }) {
           Research leads first, then write drafts for the ones that fit.
         </Empty>
       ) : (
-        shown.map((d) => <DraftCard key={d.id} draft={d} lead={byLead[d.lead_id]} onChange={() => drafts.reload()} />)
+        shown.map((d) => <DraftCard key={d.id} draft={d} lead={byLead[d.lead_id]}
+                                    onChange={() => { drafts.reload(); leads.reload() }} />)
       )}
       <p className="muted small">Compliance notes are guidance only, not legal advice.</p>
     </Page>

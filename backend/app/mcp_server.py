@@ -87,6 +87,17 @@ def create_mcp(store_provider: StoreProvider) -> MCPServer:
         return store_provider().start_drafts(max(1, min(int(limit), 25)))
 
     @mcp.tool()
+    def get_reminders() -> list[dict]:
+        """Due "Did they reply?" reminders: leads marked sent at least 5 business days ago with no
+        outcome logged. The routine can nudge the freelancer; it never contacts anyone."""
+        return store_provider().reminders()
+
+    @mcp.tool()
+    def get_funnel() -> dict:
+        """The freelancer's funnel (discovered -> won), reply rates and logging rate."""
+        return store_provider().funnel()
+
+    @mcp.tool()
     def get_job(key: str) -> dict:
         """Status of a background job started from here: "scout", "panel_snapshot", "research" or "drafts"."""
         return store_provider().job_status(key)

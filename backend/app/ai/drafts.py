@@ -75,6 +75,17 @@ Rules:
 - hook_source_url: copy the brief's hook source URL.
 {revision}"""
 
+FOLLOWUP_INSTRUCTIONS = """You write ONE short, polite follow-up to a message the freelancer already sent and that got no reply. Language: {language}.
+
+Rules:
+- Refer briefly to the earlier message (PREVIOUS MESSAGE) without repeating it and without guilt-tripping ("just bumping", "did you see").
+- Add ONE new, specific point of value: a concrete first step of the SERVICE's deliverable, or one other proof point ONLY from EVIDENCE (copy the evidence claim into claims_used). Never invent facts, numbers or clients.
+- One low-friction ask. At most 80 words. Same voice (VOICE SAMPLES). No exclamation marks.
+- Never employment framing; it is an independent project with a deliverable.
+- Channel {channel}: same format rules as before; for direct_note keep a subject (at most 7 words, may start with "Re:") and a final opt-out line.
+- hook_source_url: copy the brief's hook source URL.
+{revision}"""
+
 REVIEW_INSTRUCTIONS = """You are the Verifier. You did not write this draft. Check it against its SOURCES and report issues. Be strict but fair.
 
 Check:
@@ -142,12 +153,16 @@ def _review_input(draft: dict, brief: dict, lead: dict, page_text: str, service:
     }, ensure_ascii=False)
 
 
-def _write(settings, lead, brief, service, profile, language, notes: str | None) -> dict:
+def _write(settings, lead, brief, service, profile, language, notes: str | None,
+           kind: str = "initial", previous: str | None = None) -> dict:
     revision = f"\nREVISION: fix these problems from the last draft:\n{notes}" if notes else ""
-    instructions = WRITER_INSTRUCTIONS.format(language=_lang_name(language), channel=brief["channel"],
-                                              warm=brief.get("warm_connection") or "the contact", revision=revision)
-    out = ai.structured("smart", settings, instructions=instructions,
-                        input=_writer_input(lead, brief, service, profile, language), schema=WriterDraft)
+    template = FOLLOWUP_INSTRUCTIONS if kind == "followup" else WRITER_INSTRUCTIONS
+    instructions = template.format(language=_lang_name(language), channel=brief["channel"],
+                                   warm=brief.get("warm_connection") or "the contact", revision=revision)
+    data = _writer_input(lead, brief, service, profile, language)
+    if kind == "followup":
+        data = data[:-1] + f', "previous_message": {json.dumps(previous or "", ensure_ascii=False)}}}'
+    out = ai.structured("smart", settings, instructions=instructions, input=data, schema=WriterDraft)
     d = out.model_dump()
     d.update({"channel": brief["channel"], "language": language})  # code decides these, not the writer
     if d["channel"] != "direct_note":
@@ -158,11 +173,27 @@ def _write(settings, lead, brief, service, profile, language, notes: str | None)
 
 
 def write_and_verify(store, settings: Settings, lead: dict, language: str | None = None, *,
-                     fetcher=None, now=None) -> dict:
+                     fetcher=None, now=None, kind: str = "initial", job: str | None = None) -> dict:
+    """Write, check and save one draft. `job`: the background job to report progress to (if any)."""
+    from .. import tracker
+
     now = now or _now()
     brief = lead.get("brief")
     if not brief or not brief.get("fit"):
         raise ValueError("Research this lead first: only leads with a fitting brief get a draft")
+    if tracker.is_stopped(store, lead):
+        raise ValueError(f"{lead.get('company')} said they're not interested; no more drafts for this company")
+    previous = None
+    if kind == "followup":
+        if not tracker.followup_allowed(store, lead):
+            raise ValueError("A follow-up is only for a sent lead without a reply, and only once")
+        row = store.conn.execute("SELECT COALESCE(final_text, body) AS t, language FROM drafts WHERE lead_id = ? "
+                                 "AND COALESCE(kind, 'initial') = 'initial' AND status = 'copied' "
+                                 "ORDER BY copied_at DESC LIMIT 1", (lead["id"],)).fetchone()
+        if row is None:
+            raise ValueError("Copy and send the first message before writing a follow-up")
+        previous = row["t"]
+        language = language or row["language"]
     profile = profiles.approved_profile(store)
     services = {s["id"]: s for s in service_catalog.approved_services(store)}
     service = services.get(brief.get("service_id"))
@@ -176,15 +207,18 @@ def write_and_verify(store, settings: Settings, lead: dict, language: str | None
     hook_status = fetcher.fetch(hook_url).get("status") if hook_url else None
 
     notes, history, review = None, [], None
-    key = job_key(lead["id"])
+    def step(name: str, msg: str) -> None:
+        if job:
+            jobs.step(store, job, name, msg)
+
     for round_ in range(1, MAX_REVISIONS + 2):
-        jobs.step(store, key, "writing", "Writing your message" if round_ == 1 else f"Revising (round {round_})")
-        draft = _write(settings, lead, brief, service, profile, language, notes)
-        checks = prechecks.run_all(draft, brief, lead, profile, service, page_text, hook_status, floor, now)
+        step("writing", "Writing your message" if round_ == 1 else f"Revising (round {round_})")
+        draft = _write(settings, lead, brief, service, profile, language, notes, kind, previous)
+        checks = prechecks.run_all(draft, brief, lead, profile, service, page_text, hook_status, floor, now, kind=kind)
         failed = [c for c in checks if not c["passed"]]
         review = None
         if not failed:
-            jobs.step(store, key, "verifying", "Checking it against the sources")
+            step("verifying", "Checking it against the sources")
             review = ai.structured("check", settings,
                                    instructions=REVIEW_INSTRUCTIONS.format(language_name=_lang_name(language)),
                                    input=_review_input(draft, brief, lead, page_text, service, profile), schema=Review)
@@ -219,7 +253,7 @@ def write_and_verify(store, settings: Settings, lead: dict, language: str | None
         "lead_id": lead["id"], "channel": draft["channel"], "language": language, "subject": draft["subject"],
         "body": draft["body"], "forwardable_blurb": draft["forwardable_blurb"], "claims_used": draft["claims_used"],
         "hook_source_url": hook_url, "service_id": service["id"], "round": round_, "verifier": verifier,
-        "status": "ready" if passed else "needs_human", "template_version": WRITER_PROMPT_VERSION,
+        "status": "ready" if passed else "needs_human", "template_version": WRITER_PROMPT_VERSION, "kind": kind,
     })
 
 
@@ -235,9 +269,9 @@ def guidance(draft: dict, brief: dict) -> list[str]:
     return out
 
 
-def run_draft(store, settings: Settings, lead_id: str, language: str | None = None) -> None:
+def run_draft(store, settings: Settings, lead_id: str, language: str | None = None, kind: str = "initial") -> None:
     lead = store.lead(lead_id)
-    draft = write_and_verify(store, settings, lead, language)
+    draft = write_and_verify(store, settings, lead, language, kind=kind, job=job_key(lead_id))
     msg = ("Draft ready to copy" if draft["status"] == "ready"
            else "Draft needs your review: it didn't pass every check in 3 rounds")
     jobs.done(store, job_key(lead_id), msg, {"draft_id": draft["id"], "status": draft["status"]})

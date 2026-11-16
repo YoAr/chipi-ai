@@ -102,6 +102,7 @@ export type Draft = {
   forwardable_blurb?: string
   final_text?: string
   copied_at?: string
+  kind?: 'initial' | 'followup'
 }
 
 export type Pipeline = {
@@ -204,3 +205,20 @@ export type ServiceItem = {
 
 export type ServicesVersion = Omit<ProfileVersion, 'data'> & { data: { services: ServiceItem[] } }
 export type ServicesDoc = { latest: ServicesVersion | null; approved: ServicesVersion | null }
+
+export type Reminder = {
+  id: string
+  due_at: string
+  due: boolean
+  what: string
+  lead: { id: string; title: string; company: string | null; status: string; url: string }
+  followup: { id: string; status: string } | null
+  followup_allowed: boolean
+}
+
+export type Funnel = {
+  stages: { stage: string; count: number }[]
+  by_status: Record<string, number>
+  rates: { positive_reply_rate: number | null; reply_rate: number | null; logging_rate: number | null;
+           outcome_rate: number | null; sent: number }
+}

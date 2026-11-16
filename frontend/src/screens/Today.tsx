@@ -2,8 +2,11 @@ import { useApi } from '../api'
 import type { Tab } from '../App'
 import type { Draft, Lead, State } from '../types'
 import { Loading, Page, sourceLabel } from '../ui'
+import { useIsReal } from '../mode'
+import { ReminderInbox } from './Tracker'
 
 export function Today({ go }: { go: (t: Tab) => void }) {
+  const real = useIsReal()
   const state = useApi<State>('/api/state')
   const leads = useApi<{ leads: Lead[] }>('/api/leads?status=new')
   const drafts = useApi<{ drafts: Draft[] }>('/api/drafts?status=pending')
@@ -22,6 +25,7 @@ export function Today({ go }: { go: (t: Tab) => void }) {
           <button className="btn btn-primary" onClick={() => go('onboarding')}>Upload your CV</button>
         </div>
       )}
+      {real && <ReminderInbox go={go} />}
       <div className="stats">
         <button className="stat" onClick={() => go('leads')}><b>{today.new_leads}</b>new leads</button>
         <button className="stat" onClick={() => go('drafts')}><b>{today.drafts_pending}</b>drafts to approve</button>

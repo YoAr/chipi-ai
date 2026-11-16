@@ -146,7 +146,9 @@ def opt_out(body: str, channel: str) -> dict | None:
 
 
 def run_all(draft: dict, brief: dict, lead: dict, profile: dict, service: dict, page_text: str,
-            hook_status: int | None, floor: float | None, now: datetime | None = None) -> list[dict]:
+            hook_status: int | None, floor: float | None, now: datetime | None = None,
+            kind: str = "initial") -> list[dict]:
+    """kind="followup": the message doesn't open with the hook, so the hook checks are skipped."""
     now = now or datetime.now(timezone.utc)
     body, subject, channel = draft.get("body") or "", draft.get("subject"), draft.get("channel") or brief["channel"]
     hook = brief.get("hook") or {}
@@ -160,10 +162,13 @@ def run_all(draft: dict, brief: dict, lead: dict, profile: dict, service: dict, 
                     f"{g(rr['min'])} {g(rr['max'])} {service.get('name')}")
     page_text = f"{page_text} {_date_words(hook.get('published_at'))}"  # "on 9 November" may cite the page's own date
     allowed = f"{page_text} {lead.get('description') or ''} {lead.get('title') or ''} {evidence_text} {service_text}"
-    checks = [
+    hook_checks = [] if kind == "followup" else [
         hook_resolves(hook_status),
         hook_recent(hook.get("published_at"), now),
         hook_facts_on_page(body, page_text, lead.get("company") or ""),
+    ]
+    checks = [
+        *hook_checks,
         *length(body, subject, channel),
         no_placeholders(body, subject, draft.get("forwardable_blurb")),
         no_banned(body, subject, draft.get("forwardable_blurb")),
