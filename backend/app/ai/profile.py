@@ -11,7 +11,7 @@ Building blocks:
 - CV text: settings.data_dir / store.get_setting("cv_text_path")
 - Save: store.update_persona(fields) · store.set_doc("fit", {...}) · store.set_doc("offers", {...})
 - Shapes: fixtures/persona.json, fixtures/fit.json, fixtures/offers.json
-- Rate floor: app.guards.parse_rate_floor((settings.data_dir / "goal.md").read_text())
+- Rate floor: app.profiles.rate_floor(store) (EUR/hour, from the approved profile)
 """
 
 from __future__ import annotations

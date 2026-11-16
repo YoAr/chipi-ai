@@ -4,34 +4,16 @@ from fastapi.testclient import TestClient
 
 from app.guards import (
     GuardError, RateLimiter, check_rate, check_recipient, check_send_allowed,
-    is_http_url, parse_rate_floor, require_token,
+    is_http_url, require_token,
 )
-
-GOAL = """# Goal
-<!-- FIXED CORE -->
-## Limits
-- Rate floor: $100/hour. Never quote below it.
-<!-- ───── DERIVED: rewritten ───── -->
-- Rate floor: $5/hour (bogus)
-"""
-
-
-def test_parse_floor():
-    assert parse_rate_floor(GOAL) == 100
-
-
-def test_parse_floor_missing_or_only_derived():
-    with pytest.raises(GuardError):
-        parse_rate_floor("# nothing")
-    with pytest.raises(GuardError):
-        parse_rate_floor("<!-- DERIVED -->\n- Rate floor: $5/hour")
-
 
 def test_check_rate():
     check_rate(100, 100)
     check_rate(150.5, 100)
     with pytest.raises(GuardError):
         check_rate(99.99, 100)
+    with pytest.raises(GuardError, match="approve your profile"):
+        check_rate(150, None)  # no approved profile: nothing may be priced
 
 
 def test_send_allowed():

@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { api, useApi, useJob } from '../api'
 import type { Tab } from '../App'
 import { useIsReal } from '../mode'
+import { Interview } from '../Interview'
+import { ProfileReview } from '../ProfileReview'
 import { SampleCv } from '../SampleCv'
-import type { Persona } from '../types'
+import type { Persona, ProfileDoc } from '../types'
 import { Empty, JobStatus, Loading, Page } from '../ui'
 
 export function Onboarding({ go }: { go: (t: Tab) => void }) {
@@ -19,8 +21,7 @@ export function Onboarding({ go }: { go: (t: Tab) => void }) {
       await api.upload<Persona>('/api/cv', file)
       persona.reload()
       if (real) {
-        setStatus(null)
-        await build.start() // CV → persona → fit & rate → offers
+        setStatus(`Added ${file.name}. Start the interview below.`) // spec v2: CV → interview → profile
       } else {
         setStatus(`Added ${file.name}. Your profile is below.`)
       }
@@ -42,7 +43,7 @@ export function Onboarding({ go }: { go: (t: Tab) => void }) {
   const facts = p ? [p.role, p.years != null ? `${p.years} years` : '', p.location].filter(Boolean).join(' · ') : ''
 
   return (
-    <Page title="Your profile" lede="Upload your CV and answer two questions. Chipi builds the rest.">
+    <Page title="Your profile" lede="Upload your CV and answer a short interview. Chipi builds your profile from your answers, and you approve it.">
       <label className="dropzone" htmlFor="cv">
         <b>{hasCv ? 'Upload a newer CV' : 'Upload your CV'}</b>
         <span className="muted">PDF or Word. It stays private to you.</span>
@@ -50,14 +51,13 @@ export function Onboarding({ go }: { go: (t: Tab) => void }) {
         <input id="cv" className="sr-only" type="file" accept=".pdf,.docx,.txt,.md" disabled={build.running}
                onChange={(e) => upload(e.target.files?.[0])} />
       </label>
-      <SampleCv disabled={build.running} onUsed={async () => { persona.reload(); setStatus(null); if (real) await build.start() }} />
+      <SampleCv disabled={build.running} onUsed={async () => { persona.reload(); setStatus(real ? 'Sample CV added. Start the interview below.' : null) }} />
       {status && <p className="muted">{status}</p>}
       <JobStatus job={build.job} startError={build.startError} />
-      {real && hasCv && !build.running && build.job?.status !== 'done' && (
-        <div><button className="btn" onClick={() => build.start()}>Rebuild my profile from this CV</button></div>
-      )}
 
-      {!p ? (
+      {real ? (
+        p ? <RealProfile hasCv={hasCv} /> : <Loading error={persona.error} />
+      ) : !p ? (
         <Loading error={persona.error} />
       ) : !hasProfile ? (
         <Empty title="No profile yet">
@@ -76,7 +76,7 @@ export function Onboarding({ go }: { go: (t: Tab) => void }) {
               <input type="number" min={1} max={80} defaultValue={p.hours_per_week ?? ''} onBlur={(e) => save('hours_per_week', e.target.value)} />
             </label>
             <label>
-              Monthly income goal ($)
+              Monthly income goal (€)
               <input type="number" min={0} step={500} defaultValue={p.income_goal_monthly ?? ''} onBlur={(e) => save('income_goal_monthly', e.target.value)} />
             </label>
           </div>
@@ -85,5 +85,17 @@ export function Onboarding({ go }: { go: (t: Tab) => void }) {
         </div>
       )}
     </Page>
+  )
+}
+
+/** Real mode (spec v2): interview, then review and approve the versioned profile. */
+function RealProfile({ hasCv }: { hasCv: boolean }) {
+  const doc = useApi<ProfileDoc>('/api/profile')
+  return (
+    <>
+      <Interview hasCv={hasCv} onProfileReady={() => doc.reload()} />
+      {doc.data?.latest ? <ProfileReview key={doc.data.latest.version} doc={doc.data} onChange={() => doc.reload()} />
+        : doc.error ? <Loading error={doc.error} /> : null}
+    </>
   )
 }

@@ -91,7 +91,7 @@ def test_runs_a_tool_then_answers_with_its_result(app_with):
     second = fake.requests[1]
     assert second["previous_response_id"] == "r1"
     output = json.loads(second["input"][0]["output"])
-    assert output["rate"]["floor"] == 100  # real data from goal.md, not invented
+    assert output["rate"]["floor"] is None  # no approved profile yet: no floor, never invented
 
 
 def test_list_leads_filters_and_trims(app_with):

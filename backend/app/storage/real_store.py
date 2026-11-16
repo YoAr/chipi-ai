@@ -177,17 +177,14 @@ class RealStore:
             out["rate"]["floor"] = self._goal_floor()
         return out
 
-    def _goal_floor(self) -> int | None:
-        """The rate floor from the human-owned core of goal.md ("Rate floor: $100/hour")."""
-        try:
-            text = (self.data_dir / "goal.md").read_text(encoding="utf-8")
-        except OSError:
+    def _goal_floor(self) -> int | float | None:
+        """The rate floor (EUR/hour) from the approved profile, which owns it (CLAUDE.md rule 2)."""
+        from ..profiles import rate_floor  # lazy: profiles imports this package
+
+        value = rate_floor(self)
+        if value is None:
             return None
-        m = re.search(r"Rate floor:\s*\$\s*(\d+(?:\.\d+)?)", text)
-        if not m:
-            return None
-        value = float(m.group(1))
-        return int(value) if value.is_integer() else value
+        return int(value) if float(value).is_integer() else value
 
     def _state(self) -> dict:
         persona = self._doc("persona")

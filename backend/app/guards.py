@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hmac
-import re
 import threading
 import time
 from collections import defaultdict, deque
@@ -16,24 +15,13 @@ class GuardError(Exception):
     """A product rule would be broken."""
 
 
-_DERIVED_RE = re.compile(r"<!--[^>]*DERIVED", re.IGNORECASE)
-_FLOOR_RE = re.compile(r"Rate floor:\s*\$\s*(\d+)\s*/\s*hour", re.IGNORECASE)
-
-
-def parse_rate_floor(goal_md: str) -> int:
-    core = goal_md
-    m = _DERIVED_RE.search(goal_md)
-    if m:
-        core = goal_md[: m.start()]
-    f = _FLOOR_RE.search(core)
-    if not f:
-        raise GuardError("Rate floor line not found in the fixed core of goal.md")
-    return int(f.group(1))
-
-
-def check_rate(amount: float, floor: int) -> None:
+def check_rate(amount: float, floor: float | None) -> None:
+    """Rule 2: never below the floor. The floor comes from the approved profile
+    (app.profiles.rate_floor); with no approved profile there is no floor, so nothing may be priced."""
+    if floor is None:
+        raise GuardError("No approved rate floor yet: approve your profile before anything is priced")
     if amount < floor:
-        raise GuardError(f"Rate {amount} is below the floor of {floor}/hour")
+        raise GuardError(f"Rate €{amount} is below your floor of €{floor}/hour")
 
 
 def check_send_allowed(draft: dict) -> None:

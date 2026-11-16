@@ -21,7 +21,7 @@ It is the raw truth that lessons and metrics are computed from.
 
 **From the user:** `lead_verdict` · `draft_edited` · `draft_approved` ·
 `draft_rejected` · `rate_decision` · `steering_note` · `seed_added` ·
-`goal_core_edited` · `persona_updated`
+`goal_core_edited` · `persona_updated` · `profile_approved`
 
 **From the world:** `reply_received` · `no_reply_timeout` · `call_booked` ·
 `contract_won` · `contract_lost` · `milestone_due` · `invoice_paid`

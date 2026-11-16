@@ -133,6 +133,20 @@ CREATE TABLE IF NOT EXISTS posting_snapshots (
     PRIMARY KEY (day, source, posting_id)
 );
 CREATE INDEX IF NOT EXISTS posting_snapshots_day ON posting_snapshots(day);
+
+-- Spec v2: versioned documents with approval state (profile, services); see versions.py
+CREATE TABLE IF NOT EXISTS doc_versions (
+    name        TEXT NOT NULL,          -- profile | services
+    version     INTEGER NOT NULL,
+    json        TEXT NOT NULL,
+    status      TEXT NOT NULL,          -- draft | approved | superseded
+    author      TEXT NOT NULL,          -- agent | user
+    provenance  TEXT,                   -- JSON {model, prompt_version, input_ref, ts}
+    checks      TEXT,                   -- JSON [{name, passed, note}]
+    created_at  TEXT NOT NULL,
+    approved_at TEXT,
+    PRIMARY KEY (name, version)
+);
 """
 
 # Columns added after the first deploy. SQLite can't add columns in CREATE TABLE IF NOT

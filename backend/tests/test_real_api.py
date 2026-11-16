@@ -30,7 +30,7 @@ def test_starts_empty_and_seeded(client, tmp_path):
     assert client.get("/api/state").json()["mode"] == "real"
     assert client.get("/api/leads").json()["leads"] == []
     assert (tmp_path / "data" / "goal.md").exists()  # seeded from repo data/
-    assert client.get("/api/fit").json()["rate"]["floor"] == 100  # read from goal.md
+    assert client.get("/api/fit").json()["rate"]["floor"] is None  # owned by the approved profile; none yet
 
 
 def test_seed_then_verdict_is_recorded_as_events(client, tmp_path):
