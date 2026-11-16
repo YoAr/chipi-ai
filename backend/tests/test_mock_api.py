@@ -165,6 +165,9 @@ def test_cv_upload_rejects_unreadable_files(client):
 
 
 def test_simulated_metrics_show_one_supported_lesson(client):
+    from app.sim_timeline import demo_timeline
+
+    demo_timeline()  # the startup warm-up runs in the background; wait for it
     body = client.get("/api/metrics", params={"simulate_weeks": "true"}).json()
     assert body["simulated"] is True
     assert [h["direction"] for h in body["headline"]] == ["up", "down"]

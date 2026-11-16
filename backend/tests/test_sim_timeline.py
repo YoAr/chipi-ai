@@ -29,3 +29,46 @@ def test_final_snapshot_matches_the_summary():
 
 def test_is_cached():
     assert demo_timeline() is demo_timeline()
+
+
+def test_single_flight_under_concurrent_first_calls(monkeypatch):
+    import threading
+    import time
+
+    from app import sim_timeline
+
+    calls = []
+
+    def slow_compute():
+        calls.append(1)
+        time.sleep(0.2)
+        return {"timeline": [], "simulated": True}
+
+    monkeypatch.setattr(sim_timeline, "_result", None)
+    monkeypatch.setattr(sim_timeline, "_compute", slow_compute)
+    threads = [threading.Thread(target=sim_timeline.demo_timeline) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(calls) == 1  # eight concurrent first callers, one computation
+
+
+def test_route_answers_503_while_warming_and_never_computes(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from app import sim_timeline
+    from app.config import REPO_ROOT, Settings
+    from app.main import create_app
+
+    computed = []
+    monkeypatch.setattr(sim_timeline, "_result", None)
+    monkeypatch.setattr(sim_timeline, "_compute", lambda: computed.append(1) or {"timeline": [], "simulated": True})
+    s = Settings(mock_mode=True, data_dir=tmp_path, fixtures_dir=REPO_ROOT / "fixtures", mcp_token="t",
+                 cors_origins=(), mock_stream_delay=0, web_dist=tmp_path / "x", landing_file=tmp_path / "y.html")
+    client = TestClient(create_app(s))  # no `with`: the startup warm-up does not run
+    res = client.get("/api/metrics", params={"simulate_weeks": "true"})
+    assert res.status_code == 503 and res.json()["error"]["code"] == "unavailable"
+    assert computed == []  # the request did not start the computation
+    sim_timeline.demo_timeline()  # warm-up finishes
+    assert client.get("/api/metrics", params={"simulate_weeks": "true"}).json()["simulated"] is True

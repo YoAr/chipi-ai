@@ -66,10 +66,19 @@ function nextStep(lesson: string): string | null {
 
 export function MetricsView() {
   const today = useApi<Metrics>('/api/metrics')
-  const sim = useApi<Simulated>('/api/metrics?simulate_weeks=true') // cached on the server
+  const sim = useApi<Simulated>('/api/metrics?simulate_weeks=true') // computed once at server start
   const [view, setView] = useState<'today' | 'sim'>('today')
   const [day, setDay] = useState(14)
   const [playing, setPlaying] = useState(false)
+
+  // Right after a deploy the server is still computing the simulation (it answers 503):
+  // retry quietly every 2 s, a handful of times.
+  const retries = useRef(0)
+  useEffect(() => {
+    if (!sim.error || retries.current >= 15) return
+    const t = window.setTimeout(() => { retries.current += 1; sim.reload() }, 2000)
+    return () => window.clearTimeout(t)
+  }, [sim.error]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const timeline = sim.data?.timeline ?? []
   const lastDay = timeline.length ? timeline[timeline.length - 1].day : 14
@@ -125,7 +134,7 @@ export function MetricsView() {
                   onClick={() => { setPlaying(false); setView('sim'); setDay(lastDay) }}>2 weeks later</button>
         </div>
         <button className="btn" onClick={play} disabled={!sim.data || playing}>
-          {playing ? 'Playing…' : view === 'sim' ? 'Replay the 2 weeks' : 'Simulate 2 weeks'}
+          {!sim.data ? 'Preparing…' : playing ? 'Playing…' : view === 'sim' ? 'Replay the 2 weeks' : 'Simulate 2 weeks'}
         </button>
         {view === 'sim' && (
           <label className="scrubber">

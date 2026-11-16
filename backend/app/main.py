@@ -35,6 +35,7 @@ from .mock_store import MockStore, NotFound
 from .openai_check import STATUS as OPENAI_STATUS
 from .openai_check import check_models
 from .sim_timeline import demo_timeline
+from .sim_timeline import ready as sim_ready
 from .storage import RealStore
 from .storage import queue as work_queue
 from .storage.events import read_events
@@ -163,7 +164,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.exception_handler(StarletteHTTPException)
     async def _http(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         code = {401: "unauthorized", 403: "forbidden", 404: "not_found", 413: "too_large",
-                415: "unsupported_file", 429: "rate_limited"}.get(exc.status_code, "error")
+                415: "unsupported_file", 429: "rate_limited", 503: "unavailable"}.get(exc.status_code, "error")
         return _error(exc.status_code, code, str(exc.detail))
 
     @app.exception_handler(AIUnavailable)
@@ -231,11 +232,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return store.get("pipeline")
 
     @app.get("/api/metrics")
-    async def metrics(simulate_weeks: bool = False) -> dict:
+    def metrics(simulate_weeks: bool = False) -> dict:  # plain def: runs in the thread pool, off the event loop
         # ?simulate_weeks=true: the "simulate 2 weeks" demo: final metrics plus a day-by-day
         # timeline from a generated history. Nothing is written to the real events log.
+        # Computed once at startup; a request never computes it (503 while warming up).
         if simulate_weeks:
-            return await asyncio.to_thread(demo_timeline)
+            timeline = sim_ready()
+            if timeline is None:
+                raise StarletteHTTPException(503, "The simulation is warming up. Try again in a few seconds.")
+            return timeline
         if settings.mock_mode:
             return store.get("metrics")
         return compute_metrics(read_events(settings.data_dir), _iso_week(datetime.now(timezone.utc)))

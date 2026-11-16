@@ -1,14 +1,16 @@
 """The "Simulate 2 weeks" demo: a fixed, generated history and its metrics day by day.
 
 Nothing here touches real data. The simulation is deterministic, so the whole
-timeline is computed once (in the background at startup) and cached; the
+timeline is computed exactly once (in the background at startup) and kept; the
 Metrics screen then animates through real day-by-day snapshots, not interpolation.
+Requests never compute it: they read `ready()`, which is None until the warm-up is
+done, so many early visitors can't each start the several-second computation.
 """
 
 from __future__ import annotations
 
+import threading
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
 
 from .metrics import compute_metrics
 from .simulate import simulate
@@ -32,8 +34,27 @@ def _week(d: datetime) -> str:
     return f"{year}-W{week:02d}"
 
 
-@lru_cache(maxsize=1)
+_lock = threading.Lock()
+_result: dict | None = None
+
+
+def ready() -> dict | None:
+    """The timeline if it has been computed, else None. Never computes."""
+    return _result
+
+
 def demo_timeline() -> dict:
+    """Compute once (single-flight: concurrent callers wait for the one run), then reuse."""
+    global _result
+    if _result is not None:
+        return _result
+    with _lock:
+        if _result is None:
+            _result = _compute()
+    return _result
+
+
+def _compute() -> dict:
     """Final metrics plus one snapshot per day (day 0 = before any outreach)."""
     events = simulate(true_rates=DEMO_TRUE_RATES, **DEMO_SIM)
     start = _parse(events[0]["ts"]).replace(hour=0, minute=0, second=0)
