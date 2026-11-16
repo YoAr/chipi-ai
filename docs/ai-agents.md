@@ -17,18 +17,24 @@ UI can show.
   for the fake-client pattern and `tests/test_ai_routes.py` for the route plumbing.
 
 ## Profile: `app/ai/profile.py` (job key `profile`)
-Triggered by `POST /api/profile/build` after the CV upload.
+Triggered by `POST /api/profile/build` after the CV upload. Money is **EUR per hour, excl. VAT**. The job
+needs an **approved profile** (`app.profiles.rate_floor(store)` owns the floor); without one it fails with
+"Approve your profile first: it sets your minimum hourly rate." before any model call.
 1. `build_persona`: read the CV text (`settings.data_dir / store.get_setting("cv_text_path")`), extract
    name, role, years, location, skills, wants, avoids with the **smart** model. Extract only what the CV
    says; leave a field empty rather than guess. Save with `store.update_persona(...)`, keeping the user's
-   hours and income goal. Write a cited summary to `wiki/persona.md`.
+   hours and income goal, and never overwriting the skills / wants / avoids the approved profile set.
+   Write a cited summary to `wiki/persona.md`.
 2. `build_fit`: persona + `goal.md` fixed core + `benchmarks.json` → `fixtures/fit.json` shape. Every
-   reason cites `data/benchmarks.json#hourly`, `…#salary_equivalent`, or the CV text path.
-   **Goal checks in code**: each fit has a source; `floor` equals goal.md's floor; floor ≤ low ≤ ask ≤ high;
-   range within the benchmarks (+25% headroom); every cited source is allowed. On failure, retry up to twice
+   reason cites `data/benchmarks.json#hourly` (or the `raw/` ZZPdock extract an entry names), the CV text
+   path, or `…#salary_equivalent` only if the file has one. `rate.currency` is `"EUR"`.
+   **Goal checks in code**: each fit has a source; `floor` equals the approved profile's floor; floor ≤ low ≤
+   ask ≤ high; range within the benchmarks incl. per-role rows (+25% headroom, never below the floor); every
+   cited source is allowed. On failure, retry up to twice
    with the failed checks as feedback; then save anyway with those checks `passed: false`.
    Save with `store.set_doc("fit", ...)` and write `wiki/rate.md`.
-3. `build_offers`: three offers in `fixtures/offers.json` shape. No invented numbers in evidence.
+3. `build_offers`: three offers in `fixtures/offers.json` shape, priced in € (a price below the floor or in
+   another currency is retried, then replaced by the ask). No invented numbers in evidence.
 
 ## Search & scoring: `app/ai/scoring.py` (job key `search`)
 `run_search` is done (fetch from RemoteOK, Remotive, HN, then score, then save). Build:
@@ -36,15 +42,19 @@ Triggered by `POST /api/profile/build` after the CV upload.
   `{id, score 0–100, why ≤ 140 chars}` grounded only in the post, combined with rule signals:
   final = round(0.6 × model + 0.4 × rules). Rules use `WEIGHTS` (skills overlap, rate fit, remote,
   avoided work, below the floor). **Leads below the floor are capped at 60 and their `why` says so.**
+  The floor is the approved profile's (EUR); post rates are converted to EUR with rough fixed rates for
+  ranking only. No approved floor → the below-floor rule is skipped.
   If the model is unavailable, return the leads unscored (`score None`, why "Not scored: model unavailable")
   rather than failing.
 - Tune `WEIGHTS` (marked `# TUNE:`). That's a product decision.
 
 ## Drafts & verifier: `app/ai/drafts.py` (job key `draft:<lead_id>`)
-- `write_draft`: **smart** model. Under 150 words, one clear ask (a short call), quotes `fit.rate.ask`,
+- `write_draft`: **smart** model. Under 150 words, one clear ask (a short call), quotes `fit.rate.ask` as `€N/hour`,
   mentions only experience in the persona. `channel` is `"email"` if the post contains an email address
   (used as `to`), else `"apply_link"` with `to` = the lead URL. No fit yet → `ValueError("Build your profile first")`.
-- `code_checks`: Rate matches your ask · Not below your floor · Under 150 words, one ask · Channel allowed.
+- `code_checks`: Rate matches your ask (in €; any `$` amount fails) · Not below your floor (the approved
+  profile's; the fit's only if none is approved; neither → `ValueError`, no draft) · Under 150 words, one ask ·
+  Channel allowed.
 - `model_check`: a **separate check-model call**, fresh context: claims backed by the CV; professional tone.
 - `run_draft`: write → check → if a code check fails, rewrite once with the failures as feedback →
   `store.add_draft({lead_id, nickname, channel, to, subject, body, verifier: {passed, checks}})` even if

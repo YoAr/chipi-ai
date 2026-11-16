@@ -28,6 +28,7 @@ class Settings:
     demo_passcode: str = ""
     # Oxylabs Web API key (Bearer) for web search: Scout discovery and the Researcher.
     oxylabs_key: str = ""
+    email_allowlist: tuple[str, ...] = ()
 
 
 def load_settings() -> Settings:
@@ -48,4 +49,5 @@ def load_settings() -> Settings:
         model_fast=os.getenv("OPENAI_MODEL_FAST", "").strip(),
         demo_passcode=os.getenv("DEMO_PASSCODE", "").strip(),
         oxylabs_key=os.getenv("OXYLABS_WEB_API_KEY", "").strip(),
+        email_allowlist=tuple(a.strip() for a in os.getenv("EMAIL_ALLOWLIST", "").split(",") if a.strip()),
     )

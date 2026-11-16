@@ -156,7 +156,7 @@ def test_events_validate_type_actor_subject_payload(tmp_path, type_, actor, subj
 def test_events_all_documented_types_accepted(tmp_path):
     for t in events.EVENT_TYPES:
         events.append_event(tmp_path, t, "agent", "goal", {})
-    assert len(events.read_events(tmp_path)) == 24
+    assert len(events.read_events(tmp_path)) == 25  # + profile_approved, draft_sent
 
 
 def test_events_read_rejects_bad_since_and_handles_missing_file(tmp_path):
@@ -683,9 +683,10 @@ def test_state_and_pipeline_computed_from_tables(store):
     pipeline = store.get("pipeline")
     assert_same_shape(pipeline, fixture("pipeline"))
     cols = {c["name"]: c["items"] for c in pipeline["columns"]}
-    assert cols["Drafted"] == [{"nickname": "data-pipeline", "note": "Waiting for approval"}]
-    assert cols["Sent"] == [{"nickname": "react-rebuild", "note": "No reply, 9 days"}]
-    assert cols["Replied"] == [{"nickname": "payments-api", "note": "Reply received"}]
+    title = lambda nick: by_nick[nick]["title"]  # the board shows the lead's title, not its nickname
+    assert cols["Drafted"] == [{"nickname": "data-pipeline", "title": title("data-pipeline"), "note": "Waiting for approval"}]
+    assert cols["Sent"] == [{"nickname": "react-rebuild", "title": title("react-rebuild"), "note": "No reply, 9 days"}]
+    assert cols["Replied"] == [{"nickname": "payments-api", "title": title("payments-api"), "note": "Reply received"}]
     assert cols["Active"][0]["nickname"] == "saas-agent" and "Milestone 1" in cols["Active"][0]["note"]
     assert cols["Done"] == []
     assert [d["what"] for d in pipeline["deadlines"]] == ["Intro call", "Milestone 1", "Far away"]

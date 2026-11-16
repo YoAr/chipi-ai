@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS leads (
     status       TEXT NOT NULL DEFAULT 'new',
     found_at     TEXT,
     dedup_key    TEXT UNIQUE,
-    verdict_note TEXT
+    verdict_note TEXT,
+    description  TEXT
 );
 CREATE INDEX IF NOT EXISTS leads_status ON leads(status);
 

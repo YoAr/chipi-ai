@@ -19,7 +19,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import REPO_ROOT, Settings, load_settings
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 
 from .ai.client import AIUnavailable
 from .cv import extract_text
@@ -30,7 +29,6 @@ from .routes import search as search_routes
 from .guards import GuardError, RateLimiter, client_ip, require_token
 from .mcp_server import create_mcp, mount_mcp
 from .passcode import install as install_passcode
-from .metrics import compute_metrics
 from .mock_store import MockStore, NotFound
 from .openai_check import STATUS as OPENAI_STATUS
 from .rates import refresh_benchmarks
@@ -40,22 +38,14 @@ from .routes import scout as scout_routes
 from .routes import interview as interview_routes
 import threading
 from .openai_check import check_models
-from .simulate import simulate
+from .sim_timeline import demo_timeline
+from .sim_timeline import ready as sim_ready
 from .storage import RealStore
 from .storage import queue as work_queue
-from .storage.events import read_events
+from .storage.learning import live_metrics
 from .storage.wiki import save_raw
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-# "Simulate 2 weeks" demo: channel reply rates chosen so one lesson clears the
-# Learner's confidence bar (see tests/test_metrics.py for the no-false-lesson check).
-DEMO_TRUE_RATES = {"Direct email": 0.65, "HN Who's Hiring": 0.45, "Web search": 0.3, "RemoteOK": 0.1}
-DEMO_SIM = {"days": 14, "seed": 3, "sends_per_day": 6}
-
-
-def _iso_week(now: datetime) -> str:
-    year, week, _ = now.isocalendar()
-    return f"{year}-W{week:02d}"
 
 
 class _QueueAdapter:
@@ -133,6 +123,15 @@ class RejectIn(BaseModel):
     note: str = ""
 
 
+class ReplyIn(BaseModel):
+    note: str | None = Field(default=None, max_length=500)
+
+
+class WonIn(BaseModel):
+    amount: float | None = Field(default=None, ge=0, le=10_000_000)  # contract value, USD
+    note: str | None = Field(default=None, max_length=500)
+
+
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str
@@ -163,7 +162,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         await check_models(settings)
+        # Warm the "Simulate 2 weeks" timeline in the background (a few seconds, then cached)
+        warm = asyncio.create_task(asyncio.to_thread(demo_timeline))
         yield
+        warm.cancel()
 
     app = FastAPI(title="Chipi API", version="0.3.0", lifespan=lifespan)
     # Shared with the route modules in app/routes/ (see app/deps.py)
@@ -198,7 +200,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.exception_handler(StarletteHTTPException)
     async def _http(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         code = {401: "unauthorized", 403: "forbidden", 404: "not_found", 413: "too_large",
-                415: "unsupported_file", 429: "rate_limited"}.get(exc.status_code, "error")
+                415: "unsupported_file", 429: "rate_limited", 503: "unavailable"}.get(exc.status_code, "error")
         return _error(exc.status_code, code, str(exc.detail))
 
     @app.exception_handler(ProviderUnavailable)
@@ -270,16 +272,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return store.get("pipeline")
 
     @app.get("/api/metrics")
-    def metrics(simulate_weeks: bool = False) -> dict:
-        # ?simulate_weeks=true: the "simulate 2 weeks" demo. Computed from a generated
-        # history in memory; nothing is written to the real events log.
+    def metrics(simulate_weeks: bool = False) -> dict:  # plain def: runs in the thread pool, off the event loop
+        # ?simulate_weeks=true: the "simulate 2 weeks" demo: final metrics plus a day-by-day
+        # timeline from a generated history. Nothing is written to the real events log.
+        # Computed once at startup; a request never computes it (503 while warming up).
         if simulate_weeks:
-            events = simulate(true_rates=DEMO_TRUE_RATES, **DEMO_SIM)
-            last = datetime.fromisoformat(events[-1]["ts"].replace("Z", "+00:00"))
-            return {**compute_metrics(events, _iso_week(last)), "simulated": True}
+            timeline = sim_ready()
+            if timeline is None:
+                raise StarletteHTTPException(503, "The simulation is warming up. Try again in a few seconds.")
+            return timeline
         if settings.mock_mode:
             return store.get("metrics")
-        return compute_metrics(read_events(settings.data_dir), _iso_week(datetime.now(timezone.utc)))
+        # Live events read the way metrics reads the simulation (approve + send folded into one send)
+        return live_metrics(settings.data_dir)
 
     # Write routes ----------------------------------------------------------
     @app.post("/api/leads/{lead_id}/verdict")
@@ -315,6 +320,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/drafts/{draft_id}/reject")
     def reject(draft_id: str, body: RejectIn) -> dict:
         return store.reject_draft(draft_id, body.note)
+
+    # After approval. Plain def: the Learner write-back runs in the thread pool.
+    @app.post("/api/drafts/{draft_id}/sent")
+    def mark_sent(draft_id: str) -> dict:
+        return store.mark_sent(draft_id)  # 422 "blocked" unless approved
+
+    @app.post("/api/leads/{lead_id}/replied")
+    def mark_replied(lead_id: str, body: ReplyIn | None = None) -> dict:
+        return store.mark_replied(lead_id, body.note if body else None)
+
+    @app.post("/api/leads/{lead_id}/won")
+    def mark_won(lead_id: str, body: WonIn | None = None) -> dict:
+        body = body or WonIn()
+        return store.mark_won(lead_id, body.amount, body.note)
 
     @app.post("/api/reset", dependencies=[Depends(token_required)])
     def reset() -> dict:

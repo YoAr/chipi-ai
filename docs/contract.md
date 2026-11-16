@@ -19,9 +19,12 @@ All responses are JSON. Errors: `{"error": {"code": "…", "message": "…"}}`.
 | POST | `/api/leads/{id}/verdict` | `{verdict: "useful"\|"maybe"\|"skip", note?}` | Lead | — |
 | POST | `/api/seeds` | `{url}` | Lead (scored later) | — |
 | GET | `/api/drafts?status=pending` | — | Drafts awaiting approval | `drafts.json` |
-| POST | `/api/drafts/{id}/approve` | `{final_text}` | Draft (sent) | — |
+| POST | `/api/drafts/{id}/approve` | `{final_text}` | Draft (approved; nothing is sent) | — |
+| POST | `/api/drafts/{id}/sent` | — | Draft (sent) | — |
 | POST | `/api/drafts/{id}/reject` | `{note}` | Draft | — |
 | GET | `/api/pipeline` | — | Columns + deadlines | `pipeline.json` |
+| POST | `/api/leads/{id}/replied` | `{note?}` (optional) | Lead (replied) | — |
+| POST | `/api/leads/{id}/won` | `{amount?, note?}` (optional; amount in USD, ≥ 0) | Lead (won) | — |
 | GET | `/api/metrics` | — | Headline numbers + groups | `metrics.json` |
 | POST | `/api/chat` | `{messages: [{role, content}]}` | Server-sent events stream | — |
 | POST | `/api/reset` | header `Authorization: Bearer $MCP_TOKEN` | `{ok: true}` | — |
@@ -39,6 +42,38 @@ Rate     { floor, ask, low, high, currency: "USD", unit: "hour",
            reasons: [{ text, source }] }
 Metric   { name, value, low, high, n, direction: "up"|"down" }   // low/high = range; n = sample size
 ```
+
+### After approval (both modes; no email is sent by Chipi)
+
+The user sends an approved draft themselves (copies the text, or uses the apply link), then
+tells Chipi. The demo passcode guards these like every other `/api/` write.
+
+- `POST /api/drafts/{id}/sent`: only an **approved** draft; anything else answers **422**
+  `blocked` (product rule 1). Sets `status: "sent"` and `sent_at`, finishes its `send` queue
+  item, moves the lead to `sent`. Marking a sent draft again returns it unchanged.
+- `POST /api/leads/{id}/replied`: lead → `replied`. **409** if nothing was marked sent to
+  this lead. Once per lead: a second click (or a lead already won) changes nothing.
+- `POST /api/leads/{id}/won`: lead → `won`. **409** if nothing was marked sent. Once per lead.
+  A win straight from `sent` also records the reply it implies.
+- The Status page finds a card's lead id by nickname in `GET /api/leads`.
+
+Events written (real mode; `lead` is the lead's nickname, `channel` is where the lead came
+from: `RemoteOK`, `Remotive`, `HN Who's Hiring`, `Web search`, `Pasted link`, else
+`Direct email` / `Apply link`):
+
+```
+draft_approved  user  {draft_id, queue_id, lead_id, lead, template}          // no channel: approving isn't sending
+draft_sent      user  {draft_id, queue_id, lead_id, lead, channel, via: "email"|"apply_link", template}
+reply_received  world {lead, lead_id, draft_id, channel, reported_by: "user", note?, implied_by?: "contract_won"}
+contract_won    world {lead, lead_id, draft_id, channel, reported_by: "user", amount?, goal?, note?}
+```
+
+`GET /api/metrics` (real mode) reads an approved-then-sent pair as the one `draft_approved
+{channel, lead, template}` the simulation writes, timed at the send, so live and simulated
+numbers are counted the same way. A `draft_sent` with no approval stays visible as an
+unapproved send. After each sent/replied/won the Learner rewrites `wiki/learning.md` and the
+block between `<!-- LIVE NUMBERS … -->` and `<!-- /LIVE NUMBERS -->` in the DERIVED part of
+`goal.md` (added at the end of DERIVED the first time). The fixed core is never touched.
 
 ### Chat stream (`POST /api/chat`)
 
@@ -145,3 +180,10 @@ ProfileVersion { version, status: "draft"|"approved"|"superseded", author: "agen
 Approving sets the rate floor (EUR/hour) every price check uses, hands the exclusions to Scout,
 updates `/api/persona` (skills, wants, avoids, hours) and appends a `profile_approved` event.
 `/api/fit` `rate.floor` is null until a profile is approved.
+
+## Simulate 2 weeks (`GET /api/metrics?simulate_weeks=true`)
+
+Returns the usual Metrics shape for a generated two-week history, plus `simulated: true`
+and `timeline`: one snapshot per day, `[{day, headline, channels, learning, guardrails}]`,
+day 0 = before any outreach. Computed once at startup and cached; nothing touches real data.
+The minutes headline is a rolling 7 days here, so it doesn't reset mid-animation.

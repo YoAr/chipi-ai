@@ -1,0 +1,14 @@
+/* After approval: approved drafts (Drafts.tsx) and outcome buttons on Status cards (Pipeline.tsx).
+   Tokens only; buttons and inputs keep the shared 44px height from styles.css. */
+
+.drafts-group { display: flex; flex-direction: column; gap: 12px; }
+
+/* The approved text, read-only: what gets copied */
+.ready-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); background: var(--bg); border-radius: var(--r-inner); padding: 12px 14px; line-height: 1.6; }
+
+/* Outcome buttons on a Status card: ink (secondary), wrap in narrow lanes */
+.outcomes { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.outcome-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.outcome-row .btn { padding: 0 16px; }
+.outcome-form { display: flex; flex-direction: column; gap: 6px; }
+.outcome-form input { width: 100%; }

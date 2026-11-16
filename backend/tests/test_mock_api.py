@@ -105,9 +105,10 @@ def test_persona_update_rejects_bad_types_and_unknown_fields(client, bad):
     assert client.get("/api/persona").json()["skills"] == fixture_skills
 
 
-def test_approve_sends_with_the_edited_text(client):
+def test_approve_approves_with_the_edited_text(client):
+    # Approving never sends, in mock mode too: the user sends it, then marks it sent
     res = client.post("/api/drafts/dr_001/approve", json={"final_text": "Edited body"})
-    assert res.json()["status"] == "sent"
+    assert res.json()["status"] == "approved" and "sent_at" not in res.json()
     assert res.json()["body"] == "Edited body"
     assert client.get("/api/drafts", params={"status": "pending"}).json()["drafts"] == []
 
@@ -165,6 +166,9 @@ def test_cv_upload_rejects_unreadable_files(client):
 
 
 def test_simulated_metrics_show_one_supported_lesson(client):
+    from app.sim_timeline import demo_timeline
+
+    demo_timeline()  # the startup warm-up runs in the background; wait for it
     body = client.get("/api/metrics", params={"simulate_weeks": "true"}).json()
     assert body["simulated"] is True
     assert [h["direction"] for h in body["headline"]] == ["up", "down"]
